@@ -95,7 +95,7 @@ pub const INACTIVE: Color = Color::Gray;
 // === UI Element Colors ===
 
 /// Default border color.
-pub const BORDER_DEFAULT: Color = CYAN_DARK;
+pub const BORDER_DEFAULT: Color = Color::Rgb(71, 85, 105);
 /// Focused element border color.
 pub const BORDER_FOCUSED: Color = CYAN_PRIMARY;
 /// Panel border with accent.
@@ -113,4 +113,3 @@ pub const BTN_CONNECT_BG: Color = CYAN_PRIMARY;
 pub const BTN_TERMINATE_BG: Color = CORAL_RED;
 /// Default button background.
 pub const BTN_DEFAULT_BG: Color = Color::Rgb(71, 85, 105);
-
