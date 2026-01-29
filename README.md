@@ -1,8 +1,10 @@
 # Vortix
 
 [![Crates.io](https://img.shields.io/crates/v/vortix.svg)](https://crates.io/crates/vortix)
+[![Downloads](https://img.shields.io/crates/d/vortix.svg)](https://crates.io/crates/vortix)
 [![CI](https://github.com/Harry-kp/vortix/actions/workflows/ci.yml/badge.svg)](https://github.com/Harry-kp/vortix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/Harry-kp/vortix?style=social)](https://github.com/Harry-kp/vortix)
 
 Terminal UI for WireGuard and OpenVPN with real-time telemetry and leak guarding.
 
