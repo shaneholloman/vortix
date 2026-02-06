@@ -193,11 +193,8 @@ impl App {
         app.log(constants::MSG_BACKEND_INIT);
 
         // Log auto-save location
-        if let Some(home) = utils::home_dir() {
-            let log_path = home
-                .join(".config")
-                .join(constants::APP_NAME)
-                .join(constants::LOGS_DIR_NAME);
+        if let Ok(config_dir) = utils::get_app_config_dir() {
+            let log_path = config_dir.join(constants::LOGS_DIR_NAME);
             app.log(&format!("IO: Auto-logging to {}", log_path.display()));
         }
 
@@ -1542,7 +1539,7 @@ impl App {
                         details.interface.as_str(),
                         Some(details.endpoint.split(':').next().unwrap_or("")),
                     ),
-                    _ => (crate::core::killswitch::DEFAULT_VPN_INTERFACE, None),
+                    _ => (crate::platform::DEFAULT_VPN_INTERFACE, None),
                 };
 
                 if self.is_root {
@@ -1745,12 +1742,9 @@ impl App {
         static CLEANUP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         use std::io::Write;
 
-        let log_dir = match utils::home_dir() {
-            Some(home) => home
-                .join(".config")
-                .join(constants::APP_NAME)
-                .join(constants::LOGS_DIR_NAME),
-            None => return,
+        let log_dir = match utils::get_app_config_dir() {
+            Ok(config_dir) => config_dir.join(constants::LOGS_DIR_NAME),
+            Err(_) => return,
         };
 
         // Create log directory if needed

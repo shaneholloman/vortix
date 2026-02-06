@@ -3,7 +3,6 @@
 //! This module defines all static configuration values used throughout Vortix,
 //! including timing intervals, API endpoints, file paths, and UI messages.
 
-#![allow(dead_code)]
 use std::time::Duration;
 
 // === Application Metadata ===
@@ -12,10 +11,6 @@ use std::time::Duration;
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 /// Current application version (from Cargo.toml).
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Short technical summary of the application (from Cargo.toml).
-pub const APP_SUMMARY: &str = env!("CARGO_PKG_DESCRIPTION");
-/// Documentation and homepage URL (from Cargo.toml).
-pub const APP_URL: &str = env!("CARGO_PKG_HOMEPAGE");
 
 // === Timing Configuration ===
 
@@ -32,6 +27,28 @@ pub const PROFILES_DIR_NAME: &str = "profiles";
 pub const LOGS_DIR_NAME: &str = "logs";
 /// Name of the profile metadata file.
 pub const METADATA_FILE_NAME: &str = "metadata.json";
+/// Kill switch state persistence filename.
+pub const KILLSWITCH_STATE_FILE: &str = "killswitch.state";
+
+// === Platform-Specific Paths ===
+
+/// macOS pf configuration file path (temp file for kill switch rules).
+#[cfg(target_os = "macos")]
+pub const PF_CONF_PATH: &str = "/tmp/vortix_killswitch.conf";
+/// macOS `WireGuard` runtime directory.
+#[cfg(target_os = "macos")]
+pub const WIREGUARD_RUN_DIR: &str = "/var/run/wireguard";
+/// Linux network device statistics pseudo-file.
+#[cfg(target_os = "linux")]
+pub const PROC_NET_DEV_PATH: &str = "/proc/net/dev";
+/// System DNS resolver configuration file (both platforms).
+pub const RESOLV_CONF_PATH: &str = "/etc/resolv.conf";
+/// Linux iptables custom chain name for kill switch.
+#[cfg(target_os = "linux")]
+pub const IPTABLES_CHAIN_NAME: &str = "VORTIX_KILLSWITCH";
+/// Linux nftables table name for kill switch.
+#[cfg(target_os = "linux")]
+pub const NFT_TABLE_NAME: &str = "vortix_killswitch";
 
 // === Telemetry API Endpoints ===
 
@@ -72,18 +89,8 @@ pub const RETRY_ATTEMPTS: u8 = 2;
 
 // === UI Messages ===
 
-/// Initialization message template.
-pub const MSG_INIT: &str = "INIT: {} v{} starting...";
 /// Backend initialization message.
 pub const MSG_BACKEND_INIT: &str = "IO: Initializing VPN backend...";
-/// Ready state message template.
-pub const MSG_READY: &str = "SUCCESS: System active. Press [x] for actions.";
-/// Connection in progress message template.
-pub const MSG_CONNECTING: &str = "Connecting to {}";
-/// Connection established message template.
-pub const MSG_CONNECTED: &str = "Connected to {}";
-/// Disconnection message.
-pub const MSG_DISCONNECTED: &str = "Disconnected";
 /// Detection in progress placeholder.
 pub const MSG_DETECTING: &str = "Detecting...";
 /// Data fetching placeholder.
@@ -91,10 +98,21 @@ pub const MSG_FETCHING: &str = "Fetching...";
 /// No data available placeholder.
 pub const MSG_NO_DATA: &str = "---";
 
-// === Cryptographic Defaults ===
+// === Platform Defaults ===
 
-/// Default cipher suite for `WireGuard` connections.
-pub const DEFAULT_CIPHER: &str = "ChaCha20Poly1305";
+/// Default VPN interface when none is known.
+#[cfg(target_os = "macos")]
+pub const DEFAULT_VPN_INTERFACE: &str = "utun0";
+#[cfg(target_os = "linux")]
+pub const DEFAULT_VPN_INTERFACE: &str = "wg0";
+
+/// Emergency instructions for the user if the kill switch cannot be disabled normally.
+#[cfg(target_os = "macos")]
+pub const KILLSWITCH_EMERGENCY_MSG: &str = "You may need to run: sudo pfctl -F all";
+#[cfg(target_os = "linux")]
+pub const KILLSWITCH_EMERGENCY_MSG: &str =
+    "You may need to run: sudo iptables -F VORTIX_KILLSWITCH && sudo iptables -X VORTIX_KILLSWITCH (or: sudo nft delete table inet vortix_killswitch)";
+
 // === Import & Download Configuration ===
 
 /// Default filename for downloaded profiles if none can be determined.
@@ -118,13 +136,9 @@ pub const MSG_DOWNLOADING: &str = "Downloading profile...";
 pub const MSG_DOWNLOAD_FAILED: &str = "Download failed: ";
 pub const MSG_IMPORT_SUCCESS: &str = "Imported: ";
 pub const MSG_IMPORT_ERROR: &str = "Error: ";
-pub const MSG_PATH_NOT_FOUND: &str = "Path not found: ";
-pub const MSG_INVALID_PATH_TYPE: &str = "Invalid path type";
 pub const MSG_NO_FILES_FOUND: &str = "No .conf or .ovpn files found";
 pub const MSG_BATCH_IMPORTED: &str = "Imported ";
 pub const MSG_BATCH_IMPORTED_SUFFIX: &str = " profile(s)";
-pub const MSG_BATCH_IMPORTED_WITH_FAILURES: &str = "Imported ";
-pub const MSG_BATCH_LOG_TEMPLATE: &str = "IMPORT: Batch imported {} profiles from {}";
 
 // === Messages: CLI Output ===
 
@@ -134,8 +148,6 @@ pub const CLI_MSG_IMPORT_DETAILS_PROTO: &str = "   Protocol: ";
 pub const CLI_MSG_IMPORT_DETAILS_LOC: &str = "   Location: ";
 pub const CLI_MSG_IMPORT_DETAILS_PATH: &str = "   Saved to: ";
 pub const CLI_MSG_IMPORT_FAILED: &str = "Import failed: ";
-pub const CLI_MSG_PATH_NOT_FOUND: &str = "Path not found: ";
-pub const CLI_MSG_INVALID_PATH: &str = "Invalid path type";
 pub const CLI_MSG_SUMMARY_HEADER: &str = "\nImport Summary:";
 pub const CLI_MSG_SUMMARY_IMPORTED: &str = "   Imported: ";
 pub const CLI_MSG_SUMMARY_FAILED: &str = "   Failed: ";
@@ -159,4 +171,3 @@ pub const ERR_EMPTY_CONTENT: &str = "Downloaded content is empty";
 pub const ERR_SERVER_ERROR: &str = "Server returned error: ";
 pub const ERR_HTTP_CLIENT_BUILD_FAILED: &str = "Failed to build HTTP client";
 pub const ERR_NETWORK_REQUEST_FAILED: &str = "Network request failed";
-pub const ERR_READ_CONTENT_FAILED: &str = "Failed to read content";

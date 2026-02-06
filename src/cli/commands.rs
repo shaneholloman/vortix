@@ -172,7 +172,7 @@ fn handle_release_killswitch() {
         }
         Err(e) => {
             eprintln!("Warning: Failed to flush firewall rules: {e}");
-            eprintln!("You may need to run: sudo pfctl -F all");
+            eprintln!("{}", crate::platform::KILLSWITCH_EMERGENCY_MSG);
         }
     }
 

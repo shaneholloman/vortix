@@ -959,7 +959,7 @@ fn render_dependency_alert(frame: &mut Frame, protocol: Protocol, missing: &[Str
             " To fix this, please run the following in your terminal:",
         )]),
         Line::from(vec![Span::styled(
-            format!(" brew install {pkg}"),
+            format!(" {}", crate::platform::install_hint(pkg)),
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),

@@ -103,29 +103,33 @@ fn get_all_openvpn_pids() -> std::collections::HashMap<String, u32> {
 }
 
 /// Checks if a `WireGuard` interface exists and returns session details.
+///
+/// Uses platform-specific interface detection:
+/// - macOS: /var/run/wireguard/*.name + ifconfig
+/// - Linux: ip addr + wg show
 fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
-    let pid_file = PathBuf::from(format!("/var/run/wireguard/{name}.name"));
+    use crate::platform::InterfaceDetector;
 
-    // Check if mapping file exists OR if interface named after profile exists
-    if !pid_file.exists() && !check_interface_exists(name) {
+    // Platform-dispatched interface check
+    #[cfg(target_os = "macos")]
+    type PlatformInterface = crate::platform::macos::interface::MacInterface;
+    #[cfg(target_os = "linux")]
+    type PlatformInterface = crate::platform::linux::interface::LinuxInterface;
+
+    if !PlatformInterface::check_wireguard_interface(name) {
         return None;
     }
 
-    // Resolve Real Interface Name (macOS uses utunX, mapped in the .name file)
-    let interface_name = if pid_file.exists() {
-        std::fs::read_to_string(&pid_file)
-            .map_or_else(|_| name.to_string(), |s| s.trim().to_string())
-    } else {
-        name.to_string()
-    };
+    let interface_name =
+        PlatformInterface::resolve_wireguard_interface(name).unwrap_or_else(|| name.to_string());
 
     let mut session = ActiveSession {
         interface: interface_name.clone(),
         ..Default::default()
     };
 
-    // 1. Attempt to find PID (wireguard-go or similar) - Do this FIRST
-    if let Some(pid) = get_wireguard_pid(&interface_name) {
+    // 1. Attempt to find PID (wireguard-go or similar)
+    if let Some(pid) = PlatformInterface::get_wireguard_pid(&interface_name) {
         session.pid = Some(pid);
 
         // Primary method: Get start time from process (works cross-platform)
@@ -143,15 +147,16 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
     }
 
     // 2. Fallback: Try file metadata (only reliable on macOS)
-    // On Linux, created() returns Err, and modified() can be wrong if file was touched
     #[cfg(target_os = "macos")]
-    if session.started_at.is_none() && pid_file.exists() {
-        session.started_at = std::fs::metadata(&pid_file)
-            .and_then(|m| m.created())  // Only use created() on macOS
-            .ok();
+    if session.started_at.is_none() {
+        let pid_file =
+            PathBuf::from(crate::constants::WIREGUARD_RUN_DIR).join(format!("{name}.name"));
+        if pid_file.exists() {
+            session.started_at = std::fs::metadata(&pid_file).and_then(|m| m.created()).ok();
+        }
     }
 
-    // Log if we couldn't determine start time (helps debug connection duration issues)
+    // Log if we couldn't determine start time
     if session.started_at.is_none() {
         crate::logger::log(
             crate::logger::LogLevel::Debug,
@@ -162,12 +167,11 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
         );
     }
 
-    // 2. Parse `wg show {interface_name}`
+    // 3. Parse `wg show {interface_name}` (works the same on both platforms)
     if let Ok(output) = Command::new("wg").args(["show", &interface_name]).output() {
         let out = String::from_utf8_lossy(&output.stdout);
         for line in out.lines() {
             let line = line.trim();
-            // Parsing logic...
             if let Some(v) = line.strip_prefix("public key: ") {
                 session.public_key = v.to_string();
             }
@@ -190,71 +194,16 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
         }
     }
 
-    // 3. Parse `ifconfig {interface_name}` for IP and MTU
-    if let Ok(output) = Command::new("ifconfig").arg(&interface_name).output() {
-        let out = String::from_utf8_lossy(&output.stdout);
-        for line in out.lines() {
-            let line = line.trim();
-            if line.starts_with("inet ") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    session.internal_ip = parts[1].to_string();
-                }
-            }
-            if let Some(v) = line.split("mtu ").nth(1) {
-                session.mtu = v.to_string();
-            }
-        }
+    // 4. Get IP and MTU using platform-specific interface info
+    let (ip, mtu) = PlatformInterface::get_interface_info(&interface_name);
+    if !ip.is_empty() {
+        session.internal_ip = ip;
+    }
+    if !mtu.is_empty() {
+        session.mtu = mtu;
     }
 
     Some(session)
-}
-
-/// Finds the PID of the wireguard process managing the given interface.
-///
-/// Uses `lsof` to find the process holding the control socket.
-/// Requires root privileges (which the app checks for on startup).
-fn get_wireguard_pid(interface: &str) -> Option<u32> {
-    let sock_path = format!("/var/run/wireguard/{interface}.sock");
-
-    // Use lsof to get the PID (-t for terse output) of the process holding the socket
-    if let Ok(output) = Command::new("lsof").args(["-t", &sock_path]).output() {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !stdout.is_empty() {
-            return stdout.parse::<u32>().ok();
-        }
-    }
-
-    // Fallback: Check if we can find it via ps if lsof fails (e.g. missing binary)
-    // using the more robust search we tried earlier
-    if let Ok(output) = Command::new("ps")
-        .args(["-ax", "-o", "pid,command"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            let line_lower = line.to_lowercase();
-            // Match "wireguard" AND the interface name
-            if line_lower.contains("wireguard") && line_lower.contains(&interface.to_lowercase()) {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if let Some(pid_str) = parts.first() {
-                    if let Ok(pid) = pid_str.parse::<u32>() {
-                        return Some(pid);
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
-
-fn check_interface_exists(name: &str) -> bool {
-    // Basic check using wg show
-    Command::new("wg")
-        .args(["show", name, "public-key"])
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 /// Checks if an `OpenVPN` process is running for the given config file.
@@ -286,85 +235,135 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
     }
 
     // 2. Find OpenVPN tun/tap interface
-    // Method A: Use lsof to find the device file opened by the process (Most reliable on macOS)
+    // Method A: Use lsof to find the device file opened by the process (most reliable on macOS)
     let mut detected_iface = String::new();
-    if let Ok(output) = Command::new("lsof")
-        .args(["-n", "-P", "-p", &pid.to_string()])
-        .output()
+
+    #[cfg(target_os = "macos")]
     {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            // Look for /dev/utun, /dev/tun, or /dev/tap
-            if let Some(idx) = line.find("/dev/") {
-                let dev_path = line[idx..].split_whitespace().next().unwrap_or("");
-                if dev_path.contains("utun") || dev_path.contains("tun") || dev_path.contains("tap")
-                {
-                    // Extract interface name from path: /dev/utun3 -> utun3
-                    detected_iface = dev_path.trim_start_matches("/dev/").to_string();
-                    break;
+        if let Ok(output) = Command::new("lsof")
+            .args(["-n", "-P", "-p", &pid.to_string()])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(idx) = line.find("/dev/") {
+                    let dev_path = line[idx..].split_whitespace().next().unwrap_or("");
+                    if dev_path.contains("utun")
+                        || dev_path.contains("tun")
+                        || dev_path.contains("tap")
+                    {
+                        detected_iface = dev_path.trim_start_matches("/dev/").to_string();
+                        break;
+                    }
                 }
             }
         }
     }
 
-    // Method B: Fallback to ifconfig scanning
-    if let Ok(output) = Command::new("ifconfig").output() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut current_iface = String::new();
-        let mut found_openvpn_iface = false;
-        let mut iface_mtu = String::new();
+    // Method B: Scan for tun/tap interfaces and get IP/MTU
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = Command::new("ifconfig").output() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut current_iface = String::new();
+            let mut found_openvpn_iface = false;
+            let mut iface_mtu = String::new();
 
-        for line in stdout.lines() {
-            // Interface line starts with the interface name (no leading whitespace)
-            if !line.starts_with(' ') && !line.starts_with('\t') {
-                // New interface block
-                if let Some(iface_name) = line.split(':').next() {
-                    current_iface = iface_name.to_string();
+            for line in stdout.lines() {
+                if !line.starts_with(' ') && !line.starts_with('\t') {
+                    if let Some(iface_name) = line.split(':').next() {
+                        current_iface = iface_name.to_string();
+                        if detected_iface.is_empty() {
+                            found_openvpn_iface = current_iface.starts_with("utun")
+                                || current_iface.starts_with("tun")
+                                || current_iface.starts_with("tap");
+                        } else {
+                            found_openvpn_iface = current_iface == detected_iface;
+                        }
 
-                    // If we found the interface via lsof, we strictly look for that
-                    if detected_iface.is_empty() {
-                        // OpenVPN typically uses utun (macOS) or tun (Linux)
-                        found_openvpn_iface = current_iface.starts_with("utun")
-                            || current_iface.starts_with("tun")
-                            || current_iface.starts_with("tap");
-                    } else {
-                        found_openvpn_iface = current_iface == detected_iface;
+                        if found_openvpn_iface {
+                            if let Some(mtu_idx) = line.find("mtu ") {
+                                iface_mtu = line[mtu_idx + 4..]
+                                    .split_whitespace()
+                                    .next()
+                                    .unwrap_or("")
+                                    .to_string();
+                                if !detected_iface.is_empty() {
+                                    session.interface.clone_from(&detected_iface);
+                                    session.mtu.clone_from(&iface_mtu);
+                                }
+                            }
+                        }
                     }
-
-                    // Extract MTU from flags line: "utun3: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1500"
-                    if found_openvpn_iface {
-                        if let Some(mtu_idx) = line.find("mtu ") {
-                            iface_mtu = line[mtu_idx + 4..]
-                                .split_whitespace()
-                                .next()
-                                .unwrap_or("")
-                                .to_string();
-
-                            // If we already know the interface from lsof, we can still use this block to get MTU
-                            if !detected_iface.is_empty() {
-                                session.interface.clone_from(&detected_iface);
+                } else if found_openvpn_iface {
+                    let line = line.trim();
+                    if line.starts_with("inet ") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 2 {
+                            let wg_check = Command::new("wg")
+                                .args(["show", &current_iface])
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .status();
+                            if matches!(wg_check, Ok(s) if !s.success()) {
+                                session.internal_ip = parts[1].to_string();
                                 session.mtu.clone_from(&iface_mtu);
+                                session.interface.clone_from(&current_iface);
+                                break;
                             }
                         }
                     }
                 }
-            } else if found_openvpn_iface {
-                let line = line.trim();
-                // Look for inet address
-                if line.starts_with("inet ") {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        // Verify this isn't a WireGuard interface by checking if wg knows about it
-                        let wg_check = Command::new("wg")
-                            .args(["show", &current_iface])
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .status();
+            }
+        }
+    }
 
-                        // If wg doesn't recognize it, it's likely OpenVPN
-                        if matches!(wg_check, Ok(s) if !s.success()) {
-                            session.internal_ip = parts[1].to_string();
-                            session.mtu.clone_from(&iface_mtu);
+    #[cfg(target_os = "linux")]
+    {
+        // On Linux, use `ip addr` to find tun/tap interfaces
+        if let Ok(output) = Command::new("ip").args(["addr"]).output() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut current_iface = String::new();
+            let mut found_tun = false;
+
+            for line in stdout.lines() {
+                // Interface line: "5: tun0: <POINTOPOINT,...> mtu 1500 ..."
+                if !line.starts_with(' ') {
+                    if let Some(name_part) = line.split(':').nth(1) {
+                        current_iface = name_part.trim().to_string();
+                        found_tun =
+                            current_iface.starts_with("tun") || current_iface.starts_with("tap");
+
+                        if found_tun {
+                            // Check it's not a WireGuard interface
+                            let wg_check = Command::new("wg")
+                                .args(["show", &current_iface])
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .status();
+                            if matches!(wg_check, Ok(s) if s.success()) {
+                                found_tun = false;
+                                continue;
+                            }
+
+                            // Extract MTU
+                            if let Some(mtu_idx) = line.find("mtu ") {
+                                session.mtu = line[mtu_idx + 4..]
+                                    .split_whitespace()
+                                    .next()
+                                    .unwrap_or("")
+                                    .to_string();
+                            }
+                            detected_iface.clone_from(&current_iface);
+                        }
+                    }
+                } else if found_tun {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("inet ") {
+                        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                        if parts.len() >= 2 {
+                            session.internal_ip =
+                                parts[1].split('/').next().unwrap_or("").to_string();
                             session.interface.clone_from(&current_iface);
                             break;
                         }
@@ -374,7 +373,7 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
         }
     }
 
-    // Ensure interface is set if we found it via lsof, even if ifconfig didn't show IP yet
+    // Ensure interface is set if we detected one
     if session.interface.is_empty() && !detected_iface.is_empty() {
         session.interface = detected_iface;
     }
@@ -390,12 +389,10 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
         .output()
     {
         let args = String::from_utf8_lossy(&output.stdout);
-        // Look for --remote argument
         if let Some(remote_idx) = args.find("--remote") {
-            let rest = &args[remote_idx + 9..];
+            let rest = args.get(remote_idx + "--remote ".len()..).unwrap_or("");
             let parts: Vec<&str> = rest.split_whitespace().collect();
             if !parts.is_empty() {
-                // Format: --remote host port
                 let host = parts[0];
                 let port = parts.get(1).unwrap_or(&"1194");
                 session.endpoint = format!("{host}:{port}");
@@ -403,10 +400,14 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
         }
     }
 
-    // If no endpoint from args, try parsing the config file
-    if session.endpoint.is_empty() {
-        if let Ok(content) = std::fs::read_to_string(config_path) {
-            for line in content.lines() {
+    // Set cipher info (OpenVPN default or from config)
+    session.public_key = "OpenVPN".to_string();
+
+    // Read config file once for both endpoint and cipher extraction
+    if let Ok(config_content) = std::fs::read_to_string(config_path) {
+        // If no endpoint from args, try parsing the config file
+        if session.endpoint.is_empty() {
+            for line in config_content.lines() {
                 let line = line.trim();
                 if line.to_lowercase().starts_with("remote ") {
                     let parts: Vec<&str> = line.split_whitespace().collect();
@@ -419,14 +420,9 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
                 }
             }
         }
-    }
 
-    // Set cipher info (OpenVPN default or from config)
-    session.public_key = "OpenVPN".to_string(); // Use this field to indicate protocol
-
-    // Try to get cipher from config
-    if let Ok(content) = std::fs::read_to_string(config_path) {
-        for line in content.lines() {
+        // Try to get cipher from config
+        for line in config_content.lines() {
             let line = line.trim();
             if line.to_lowercase().starts_with("cipher ") {
                 if let Some(cipher) = line.split_whitespace().nth(1) {
@@ -496,4 +492,55 @@ fn parse_ps_etime(etime: &str) -> Option<std::time::Duration> {
     }
 
     Some(Duration::from_secs(seconds))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_parse_ps_etime_minutes_seconds() {
+        assert_eq!(parse_ps_etime("01:23"), Some(Duration::from_secs(83)));
+        assert_eq!(parse_ps_etime("00:05"), Some(Duration::from_secs(5)));
+        assert_eq!(parse_ps_etime("59:59"), Some(Duration::from_secs(3599)));
+    }
+
+    #[test]
+    fn test_parse_ps_etime_hours_minutes_seconds() {
+        assert_eq!(parse_ps_etime("1:02:03"), Some(Duration::from_secs(3723)));
+        assert_eq!(parse_ps_etime("12:34:56"), Some(Duration::from_secs(45296)));
+    }
+
+    #[test]
+    fn test_parse_ps_etime_days_hours_minutes_seconds() {
+        // Format: dd-hh:mm:ss
+        assert_eq!(
+            parse_ps_etime("2-03:04:05"),
+            Some(Duration::from_secs(2 * 86400 + 3 * 3600 + 4 * 60 + 5))
+        );
+        assert_eq!(
+            parse_ps_etime("1-00:00:00"),
+            Some(Duration::from_secs(86400))
+        );
+    }
+
+    #[test]
+    fn test_parse_ps_etime_just_seconds() {
+        assert_eq!(parse_ps_etime("5"), Some(Duration::from_secs(5)));
+        assert_eq!(parse_ps_etime("0"), Some(Duration::from_secs(0)));
+    }
+
+    #[test]
+    fn test_parse_ps_etime_empty_and_invalid() {
+        assert_eq!(parse_ps_etime(""), None);
+        assert_eq!(parse_ps_etime("-"), None);
+        assert_eq!(parse_ps_etime("abc"), None);
+    }
+
+    #[test]
+    fn test_parse_ps_etime_whitespace() {
+        assert_eq!(parse_ps_etime("  01:23  "), Some(Duration::from_secs(83)));
+        assert_eq!(parse_ps_etime("  5  "), Some(Duration::from_secs(5)));
+    }
 }

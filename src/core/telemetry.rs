@@ -451,89 +451,166 @@ fn extract_json_string(json: &str, key: &str) -> Option<String> {
     value.get(key)?.as_str().map(String::from)
 }
 
+/// Parsed ping output statistics.
+#[derive(Debug, Default, PartialEq)]
+pub struct PingStats {
+    pub latency_ms: u64,
+    pub packet_loss: f32,
+    pub jitter_ms: u64,
+}
+
+/// Parse ping command output to extract latency, packet loss, and jitter.
+///
+/// Handles both macOS and Linux output formats:
+/// - macOS: "round-trip min/avg/max/stddev = 1.234/5.678/9.012/3.456 ms"
+/// - Linux: "rtt min/avg/max/mdev = 1.234/5.678/9.012/3.456 ms"
+/// - macOS loss: "10 packets transmitted, 8 packets received, 20.0% packet loss"
+/// - Linux loss: "10 packets transmitted, 8 received, 20% packet loss, time 9001ms"
+pub fn parse_ping_output(output: &str) -> PingStats {
+    let mut stats = PingStats::default();
+
+    for line in output.lines() {
+        if line.contains("packet loss") {
+            if let Some(loss_idx) = line.find("% packet loss") {
+                let before_loss = &line[..loss_idx];
+                if let Some(percent_str) = before_loss
+                    .split([',', ' '])
+                    .filter(|s| !s.is_empty())
+                    .rfind(|s| s.chars().all(|c| c.is_ascii_digit() || c == '.'))
+                {
+                    if let Ok(val) = percent_str.parse::<f32>() {
+                        stats.packet_loss = val;
+                    }
+                }
+            }
+        }
+
+        // Handle both "min/avg/max/stddev" (Linux mdev) and "round-trip min/avg/max/stddev" (macOS)
+        if line.contains("min/avg/max") {
+            if let Some(eq_pos) = line.find('=') {
+                let values_str = &line[eq_pos + 1..].trim();
+                let values: Vec<&str> = values_str.split('/').collect();
+                if values.len() >= 4 {
+                    if let Ok(avg) = values[1].trim().parse::<f64>() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        {
+                            stats.latency_ms = avg.max(0.0) as u64;
+                        }
+                    }
+                    let stddev_str = values[3].trim_end_matches(" ms").trim();
+                    if let Ok(stddev) = stddev_str.parse::<f64>() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        {
+                            stats.jitter_ms = stddev.max(0.0) as u64;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    stats
+}
+
+/// Parse `/proc/net/dev` output (Linux) to get total bytes in/out.
+#[allow(dead_code)]
+///
+/// Format: `iface: rx_bytes rx_packets rx_errs ... tx_bytes tx_packets tx_errs ...`
+/// Returns (`total_bytes_in`, `total_bytes_out`) excluding loopback.
+pub fn parse_proc_net_dev(content: &str) -> (u64, u64) {
+    let mut total_in: u64 = 0;
+    let mut total_out: u64 = 0;
+
+    for line in content.lines().skip(2) {
+        // Skip 2 header lines
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Split on ':' to get interface name and stats
+        let parts: Vec<&str> = line.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+
+        let iface = parts[0].trim();
+        // Skip loopback
+        if iface == "lo" {
+            continue;
+        }
+
+        let stats: Vec<&str> = parts[1].split_whitespace().collect();
+        // rx_bytes is index 0, tx_bytes is index 8
+        if stats.len() >= 10 {
+            if let Ok(rx) = stats[0].parse::<u64>() {
+                total_in += rx;
+            }
+            if let Ok(tx) = stats[8].parse::<u64>() {
+                total_out += tx;
+            }
+        }
+    }
+
+    (total_in, total_out)
+}
+
+/// Parse `ip addr show {iface}` output (Linux) to extract IP and MTU.
+#[allow(dead_code)]
+///
+/// Returns (`ip_address`, `mtu`).
+pub fn parse_ip_addr_output(output: &str) -> (String, String) {
+    let mut ip = String::new();
+    let mut mtu = String::new();
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        // MTU is on the first line: "4: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 ..."
+        if trimmed.contains("mtu ") && mtu.is_empty() {
+            if let Some(mtu_idx) = trimmed.find("mtu ") {
+                let rest = &trimmed[mtu_idx + 4..];
+                if let Some(val) = rest.split_whitespace().next() {
+                    mtu = val.to_string();
+                }
+            }
+        }
+        // IP is on an "inet " line: "    inet 10.0.0.2/32 scope global wg0"
+        if trimmed.starts_with("inet ") && ip.is_empty() {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 2 {
+                // Strip CIDR notation if present
+                ip = parts[1].split('/').next().unwrap_or("").to_string();
+            }
+        }
+    }
+
+    (ip, mtu)
+}
+
 /// Measures network latency, packet loss, and jitter by pinging reliable hosts.
 fn fetch_latency(tx: &Sender<TelemetryUpdate>) {
     let tx_clone = tx.clone();
     thread::spawn(move || {
+        // macOS ping -W takes milliseconds; Linux ping -W takes seconds
+        #[cfg(target_os = "macos")]
+        let timeout = (u64::from(constants::PING_TIMEOUT_SECS) * 1000).to_string();
+        #[cfg(not(target_os = "macos"))]
         let timeout = constants::PING_TIMEOUT_SECS.to_string();
 
         for target in constants::PING_TARGETS {
             for attempt in 0..constants::RETRY_ATTEMPTS {
                 if let Ok(output) = std::process::Command::new("ping")
-                    .args(["-c", "10", "-i", "0.2", "-t", &timeout, target])
+                    .args(["-c", "10", "-i", "0.2", "-W", &timeout, target])
                     .output()
                 {
                     if output.status.success() {
                         let stdout = String::from_utf8_lossy(&output.stdout);
+                        let stats = parse_ping_output(&stdout);
 
-                        let mut latency_ms = 0u64;
-                        let mut packet_loss = 0.0f32;
-                        let mut jitter_ms = 0u64;
-
-                        for line in stdout.lines() {
-                            if line.contains("packet loss") {
-                                // Robust parsing for different ping formats:
-                                // macOS:  "10 packets transmitted, 8 packets received, 20.0% packet loss"
-                                // Linux:  "10 packets transmitted, 8 received, 20% packet loss, time 9001ms"
-                                //
-                                // Strategy: Find "% packet loss" and work backwards to get the number
-                                if let Some(loss_idx) = line.find("% packet loss") {
-                                    // Extract substring before "% packet loss"
-                                    let before_loss = &line[..loss_idx];
-
-                                    // Find the last number (which should be the packet loss percentage)
-                                    // Split by common delimiters and take the last numeric token
-                                    if let Some(percent_str) = before_loss
-                                        .split([',', ' '])
-                                        .filter(|s| !s.is_empty())
-                                        .rfind(|s| {
-                                            s.chars().all(|c| c.is_ascii_digit() || c == '.')
-                                        })
-                                    {
-                                        if let Ok(val) = percent_str.parse::<f32>() {
-                                            packet_loss = val;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Handle both "min/avg/max/stddev" (Linux) and "round-trip min/avg/max/stddev" (macOS)
-                            if line.contains("min/avg/max") {
-                                // Find the = sign and parse what comes after
-                                if let Some(eq_pos) = line.find('=') {
-                                    let values_str = &line[eq_pos + 1..].trim();
-                                    let values: Vec<&str> = values_str.split('/').collect();
-                                    if values.len() >= 4 {
-                                        // avg is index 1
-                                        if let Ok(avg) = values[1].trim().parse::<f64>() {
-                                            #[allow(
-                                                clippy::cast_possible_truncation,
-                                                clippy::cast_sign_loss
-                                            )]
-                                            {
-                                                latency_ms = avg.max(0.0) as u64;
-                                            }
-                                        }
-                                        // stddev is index 3, might have " ms" suffix
-                                        let stddev_str = values[3].trim_end_matches(" ms").trim();
-                                        if let Ok(stddev) = stddev_str.parse::<f64>() {
-                                            #[allow(
-                                                clippy::cast_possible_truncation,
-                                                clippy::cast_sign_loss
-                                            )]
-                                            {
-                                                jitter_ms = stddev.max(0.0) as u64;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if latency_ms > 0 {
-                            let _ = tx_clone.send(TelemetryUpdate::Latency(latency_ms));
-                            let _ = tx_clone.send(TelemetryUpdate::PacketLoss(packet_loss));
-                            let _ = tx_clone.send(TelemetryUpdate::Jitter(jitter_ms));
+                        if stats.latency_ms > 0 {
+                            let _ = tx_clone.send(TelemetryUpdate::Latency(stats.latency_ms));
+                            let _ = tx_clone.send(TelemetryUpdate::PacketLoss(stats.packet_loss));
+                            let _ = tx_clone.send(TelemetryUpdate::Jitter(stats.jitter_ms));
                             return;
                         }
                     }
@@ -555,10 +632,19 @@ fn fetch_latency(tx: &Sender<TelemetryUpdate>) {
 fn fetch_security_info(tx: &Sender<TelemetryUpdate>) {
     let tx_clone = tx.clone();
     thread::spawn(move || {
-        // Try multiple methods to get DNS server
-        let dns = try_get_dns_resolv_conf()
-            .or_else(try_get_dns_scutil)
-            .or_else(try_get_dns_networksetup);
+        // Use platform-specific DNS resolution
+        let dns = {
+            #[cfg(target_os = "macos")]
+            {
+                use crate::platform::DnsResolver;
+                crate::platform::macos::dns::MacDns::get_dns_server()
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use crate::platform::DnsResolver;
+                crate::platform::linux::dns::LinuxDns::get_dns_server()
+            }
+        };
 
         if let Some(dns_server) = dns {
             let _ = tx_clone.send(TelemetryUpdate::Dns(dns_server));
@@ -579,84 +665,6 @@ fn fetch_security_info(tx: &Sender<TelemetryUpdate>) {
     });
 }
 
-/// Try to get DNS from /etc/resolv.conf
-fn try_get_dns_resolv_conf() -> Option<String> {
-    let output = std::process::Command::new("grep")
-        .args(["nameserver", "/etc/resolv.conf"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let line = stdout.lines().next()?;
-    let dns = line.replace("nameserver", "").trim().to_string();
-    if dns.is_empty() {
-        return None;
-    }
-    Some(dns)
-}
-
-/// Try to get DNS from scutil (macOS)
-fn try_get_dns_scutil() -> Option<String> {
-    let output = std::process::Command::new("scutil")
-        .args(["--dns"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("nameserver[0]") {
-            if let Some(dns) = trimmed.split(':').nth(1) {
-                let dns = dns.trim().to_string();
-                if !dns.is_empty() {
-                    return Some(dns);
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Try to get DNS from networksetup (macOS)
-fn try_get_dns_networksetup() -> Option<String> {
-    // First get the primary service
-    let output = std::process::Command::new("networksetup")
-        .args(["-listallnetworkservices"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Try common service names
-    for service in ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"] {
-        if stdout.contains(service) {
-            if let Ok(dns_output) = std::process::Command::new("networksetup")
-                .args(["-getdnsservers", service])
-                .output()
-            {
-                let dns_stdout = String::from_utf8_lossy(&dns_output.stdout);
-                let first_line = dns_stdout.lines().next().unwrap_or("").trim();
-                // Skip "There aren't any DNS Servers" message
-                if !first_line.is_empty() && !first_line.contains("aren't") {
-                    return Some(first_line.to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
 /// Network traffic statistics tracker.
 ///
 /// Tracks cumulative byte counts and calculates per-second throughput rates.
@@ -669,8 +677,9 @@ pub struct NetworkStats {
 impl NetworkStats {
     /// Updates network statistics by reading system interface data.
     ///
-    /// Parses `netstat -ib` output on macOS/Unix to calculate network throughput.
-    /// Uses dynamic column detection for robustness across different netstat versions.
+    /// Uses platform-specific implementations:
+    /// - macOS: `netstat -ib` with dynamic column detection
+    /// - Linux: `/proc/net/dev` parsing
     ///
     /// # Returns
     ///
@@ -679,74 +688,27 @@ impl NetworkStats {
         let mut current_down = 0u64;
         let mut current_up = 0u64;
 
-        if let Ok(output) = std::process::Command::new("netstat").args(["-ib"]).output() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut lines = stdout.lines();
-
-            // Parse header row to find column indices (robust against format changes)
-            let (ibytes_idx, obytes_idx) = if let Some(header) = lines.next() {
-                let headers: Vec<&str> = header.split_whitespace().collect();
-                let ibytes_pos = headers
-                    .iter()
-                    .position(|&h| h.eq_ignore_ascii_case("ibytes"));
-                let obytes_pos = headers
-                    .iter()
-                    .position(|&h| h.eq_ignore_ascii_case("obytes"));
-
-                match (ibytes_pos, obytes_pos) {
-                    (Some(i), Some(o)) => (i, o),
-                    // Fallback to traditional positions if headers don't match expected format
-                    // Standard macOS format: Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes
-                    _ => (6, 9),
-                }
-            } else {
-                return (current_down, current_up);
-            };
-
-            let mut total_bytes_in: u64 = 0;
-            let mut total_bytes_out: u64 = 0;
-
-            // Parse data rows
-            for line in lines {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-
-                // Ensure we have enough columns for both Ibytes and Obytes
-                if parts.len() > ibytes_idx.max(obytes_idx) {
-                    let iface = parts[0];
-
-                    // Skip loopback interfaces (lo0, lo1, etc.)
-                    if iface.starts_with("lo") {
-                        continue;
-                    }
-
-                    // Validate that the columns contain valid numbers before parsing
-                    if let (Some(ibytes_str), Some(obytes_str)) =
-                        (parts.get(ibytes_idx), parts.get(obytes_idx))
-                    {
-                        // Additional validation: check if these look like numbers
-                        if ibytes_str.chars().all(|c| c.is_ascii_digit())
-                            && obytes_str.chars().all(|c| c.is_ascii_digit())
-                        {
-                            if let (Ok(ibytes), Ok(obytes)) =
-                                (ibytes_str.parse::<u64>(), obytes_str.parse::<u64>())
-                            {
-                                total_bytes_in += ibytes;
-                                total_bytes_out += obytes;
-                            }
-                        }
-                    }
-                }
+        let (total_bytes_in, total_bytes_out) = {
+            #[cfg(target_os = "macos")]
+            {
+                use crate::platform::NetworkStatsProvider;
+                crate::platform::macos::network::MacNetworkStats::get_total_bytes()
             }
-
-            // Calculate rate (bytes per second since last tick)
-            // First call returns 0 as we're establishing baseline
-            if self.last_bytes_in > 0 {
-                current_down = total_bytes_in.saturating_sub(self.last_bytes_in);
-                current_up = total_bytes_out.saturating_sub(self.last_bytes_out);
+            #[cfg(target_os = "linux")]
+            {
+                use crate::platform::NetworkStatsProvider;
+                crate::platform::linux::network::LinuxNetworkStats::get_total_bytes()
             }
-            self.last_bytes_in = total_bytes_in;
-            self.last_bytes_out = total_bytes_out;
+        };
+
+        // Calculate rate (bytes per second since last tick)
+        // First call returns 0 as we're establishing baseline
+        if self.last_bytes_in > 0 {
+            current_down = total_bytes_in.saturating_sub(self.last_bytes_in);
+            current_up = total_bytes_out.saturating_sub(self.last_bytes_out);
         }
+        self.last_bytes_in = total_bytes_in;
+        self.last_bytes_out = total_bytes_out;
 
         (current_down, current_up)
     }
@@ -821,5 +783,161 @@ mod tests {
         assert!(!is_valid_ipv4("1.2.3.4.5"));
         assert!(!is_valid_ipv4("not.an.ip.address"));
         assert!(!is_valid_ipv4(""));
+    }
+
+    // === Ping output parsing tests ===
+
+    #[test]
+    fn test_parse_ping_output_macos() {
+        let output = "\
+PING 1.1.1.1 (1.1.1.1): 56 data bytes
+64 bytes from 1.1.1.1: icmp_seq=0 ttl=57 time=1.234 ms
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=57 time=5.678 ms
+
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 10 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 1.234/5.678/9.012/3.456 ms";
+
+        let stats = parse_ping_output(output);
+        assert_eq!(stats.latency_ms, 5); // avg 5.678 truncated to u64
+        assert!((stats.packet_loss - 0.0).abs() < f32::EPSILON);
+        assert_eq!(stats.jitter_ms, 3); // stddev 3.456 truncated to u64
+    }
+
+    #[test]
+    fn test_parse_ping_output_linux() {
+        let output = "\
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=57 time=1.23 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=57 time=5.67 ms
+
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 8 received, 20% packet loss, time 9001ms
+rtt min/avg/max/mdev = 1.234/5.678/9.012/3.456 ms";
+
+        let stats = parse_ping_output(output);
+        assert_eq!(stats.latency_ms, 5);
+        assert!((stats.packet_loss - 20.0).abs() < f32::EPSILON);
+        assert_eq!(stats.jitter_ms, 3);
+    }
+
+    #[test]
+    fn test_parse_ping_output_100_percent_loss() {
+        let output = "\
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 0 packets received, 100.0% packet loss";
+
+        let stats = parse_ping_output(output);
+        assert_eq!(stats.latency_ms, 0);
+        assert!((stats.packet_loss - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_ping_output_empty() {
+        let stats = parse_ping_output("");
+        assert_eq!(stats, PingStats::default());
+    }
+
+    // === /proc/net/dev parsing tests ===
+
+    #[test]
+    fn test_parse_proc_net_dev() {
+        let content = "\
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 1000       10    0    0    0     0          0         0     1000       10    0    0    0     0       0          0
+  eth0: 5000       50    0    0    0     0          0         0     3000       30    0    0    0     0       0          0
+  wg0:  2000       20    0    0    0     0          0         0     1500       15    0    0    0     0       0          0";
+
+        let (bytes_in, bytes_out) = parse_proc_net_dev(content);
+        // Should skip lo (1000/1000) and sum eth0 (5000/3000) + wg0 (2000/1500)
+        assert_eq!(bytes_in, 7000);
+        assert_eq!(bytes_out, 4500);
+    }
+
+    #[test]
+    fn test_parse_proc_net_dev_only_loopback() {
+        let content = "\
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 1000       10    0    0    0     0          0         0     1000       10    0    0    0     0       0          0";
+
+        let (bytes_in, bytes_out) = parse_proc_net_dev(content);
+        assert_eq!(bytes_in, 0);
+        assert_eq!(bytes_out, 0);
+    }
+
+    #[test]
+    fn test_parse_proc_net_dev_empty() {
+        let (bytes_in, bytes_out) = parse_proc_net_dev("");
+        assert_eq!(bytes_in, 0);
+        assert_eq!(bytes_out, 0);
+    }
+
+    // === ip addr output parsing tests ===
+
+    #[test]
+    fn test_parse_ip_addr_output_wireguard() {
+        let output = "\
+4: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/none
+    inet 10.0.0.2/32 scope global wg0
+       valid_lft forever preferred_lft forever";
+
+        let (ip, mtu) = parse_ip_addr_output(output);
+        assert_eq!(ip, "10.0.0.2");
+        assert_eq!(mtu, "1420");
+    }
+
+    #[test]
+    fn test_parse_ip_addr_output_tun() {
+        let output = "\
+5: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none
+    inet 10.8.0.6/24 brd 10.8.0.255 scope global tun0
+       valid_lft forever preferred_lft forever";
+
+        let (ip, mtu) = parse_ip_addr_output(output);
+        assert_eq!(ip, "10.8.0.6");
+        assert_eq!(mtu, "1500");
+    }
+
+    #[test]
+    fn test_parse_ip_addr_output_empty() {
+        let (ip, mtu) = parse_ip_addr_output("");
+        assert!(ip.is_empty());
+        assert!(mtu.is_empty());
+    }
+
+    // === DNS parsing tests ===
+
+    #[test]
+    fn test_parse_ip_api_response_full() {
+        let json =
+            r#"{"ip": "1.2.3.4", "org": "AS12345 Test ISP", "city": "Berlin", "country": "DE"}"#;
+        let result = parse_ip_api_response(json);
+        assert!(result.is_some());
+        let (ip, isp, location) = result.unwrap();
+        assert_eq!(ip, "1.2.3.4");
+        assert_eq!(isp, Some("AS12345 Test ISP".to_string()));
+        assert_eq!(location, Some("Berlin, DE".to_string()));
+    }
+
+    #[test]
+    fn test_parse_ip_api_response_ip_only() {
+        let json = r#"{"ip": "8.8.8.8"}"#;
+        let result = parse_ip_api_response(json);
+        assert!(result.is_some());
+        let (ip, isp, location) = result.unwrap();
+        assert_eq!(ip, "8.8.8.8");
+        assert!(isp.is_none());
+        assert!(location.is_none());
+    }
+
+    #[test]
+    fn test_parse_ip_api_response_invalid() {
+        assert!(parse_ip_api_response("not json").is_none());
+        assert!(parse_ip_api_response("{}").is_none());
+        assert!(parse_ip_api_response(r#"{"ip": "not_an_ip"}"#).is_none());
     }
 }

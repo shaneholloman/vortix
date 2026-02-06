@@ -1,6 +1,9 @@
 //! Kill switch firewall control module.
 //!
-//! Controls macOS `pf` (Packet Filter) to block non-VPN traffic when kill switch is active.
+//! Controls the system firewall to block non-VPN traffic when kill switch is active.
+//! Uses platform-specific implementations:
+//! - macOS: pf (Packet Filter) via pfctl
+//! - Linux: iptables with custom `VORTIX_KILLSWITCH` chain
 //!
 //! # Safety
 //!
@@ -11,23 +14,15 @@
 //! - Allow VPN server IP for reconnection
 //! - Allow all traffic on VPN interface
 
+use crate::constants;
 use crate::logger::{self, LogLevel};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::platform::Firewall;
 use crate::state::{KillSwitchMode, KillSwitchState};
 use crate::utils;
-use std::fmt::Write as FmtWrite;
 use std::fs;
-use std::io::{self, Write as IoWrite};
+use std::io;
 use std::path::PathBuf;
-use std::process::Command;
-
-/// State file path for kill switch persistence
-const STATE_FILE: &str = "killswitch.state";
-
-/// pf configuration file path
-const PF_CONF_PATH: &str = "/tmp/vortix_killswitch.conf";
-
-/// Default VPN interface when none is known (macOS `WireGuard` default)
-pub const DEFAULT_VPN_INTERFACE: &str = "utun0";
 
 /// Result type for kill switch operations
 pub type Result<T> = std::result::Result<T, KillSwitchError>;
@@ -35,7 +30,7 @@ pub type Result<T> = std::result::Result<T, KillSwitchError>;
 /// Errors that can occur during kill switch operations
 #[derive(Debug)]
 pub enum KillSwitchError {
-    /// Failed to execute pf command
+    /// Failed to execute firewall command
     CommandFailed(String),
     /// I/O error
     Io(io::Error),
@@ -46,7 +41,7 @@ pub enum KillSwitchError {
 impl std::fmt::Display for KillSwitchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CommandFailed(msg) => write!(f, "pf command failed: {msg}"),
+            Self::CommandFailed(msg) => write!(f, "firewall command failed: {msg}"),
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::NotRoot => write!(f, "kill switch requires root privileges"),
         }
@@ -61,178 +56,62 @@ impl From<io::Error> for KillSwitchError {
     }
 }
 
-/// Generate pf rules that block all traffic except VPN
-fn generate_pf_rules(vpn_interface: &str, vpn_server_ip: Option<&str>) -> String {
-    let mut rules = format!(
-        r"# Vortix Kill Switch Rules - Auto-generated
-# DO NOT EDIT - Will be overwritten
-
-# Default: block all
-block all
-
-# Allow loopback
-pass quick on lo0 all
-
-# Allow local network (RFC1918)
-pass out quick to 192.168.0.0/16
-pass in quick from 192.168.0.0/16
-pass out quick to 10.0.0.0/8
-pass in quick from 10.0.0.0/8
-pass out quick to 172.16.0.0/12
-pass in quick from 172.16.0.0/12
-
-# Allow DHCP
-pass out quick proto udp from any port 68 to any port 67
-pass in quick proto udp from any port 67 to any port 68
-
-# Allow all traffic on VPN interface
-pass quick on {vpn_interface} all
-"
-    );
-
-    // Allow VPN server IP if known (for reconnection)
-    if let Some(ip) = vpn_server_ip {
-        // Using writeln! to avoid clippy::write_with_newline and handling the result
-        writeln!(
-            rules,
-            "\n# Allow VPN server for reconnection\npass out quick proto udp to {ip}\npass out quick proto tcp to {ip}"
-        )
-        .unwrap();
-    }
-
-    rules
-}
-
-/// Enable kill switch by loading restrictive pf rules.
+/// Enable kill switch by loading restrictive firewall rules.
+///
+/// Delegates to the platform-specific firewall implementation.
 ///
 /// # Arguments
 ///
-/// * `vpn_interface` - The VPN tunnel interface (e.g., "utun3", "tun0")
+/// * `vpn_interface` - The VPN tunnel interface (e.g., "utun3" on macOS, "wg0" on Linux)
 /// * `vpn_server_ip` - Optional VPN server IP to allow for reconnection
 ///
 /// # Errors
 ///
-/// Returns error if not running as root or pf commands fail.
+/// Returns error if not running as root or firewall commands fail.
 pub fn enable_blocking(vpn_interface: &str, vpn_server_ip: Option<&str>) -> Result<()> {
-    logger::log(
-        LogLevel::Info,
-        "FIREWALL",
-        format!(
-            "Enabling kill switch on interface '{}'{}",
+    #[cfg(target_os = "macos")]
+    {
+        crate::platform::macos::firewall::PfFirewall::enable_blocking(vpn_interface, vpn_server_ip)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        crate::platform::linux::firewall::IptablesFirewall::enable_blocking(
             vpn_interface,
-            vpn_server_ip
-                .map(|ip| format!(", server: {ip}"))
-                .unwrap_or_default()
-        ),
-    );
-
-    if !crate::utils::is_root() {
-        logger::log(
-            LogLevel::Error,
-            "FIREWALL",
-            "Kill switch requires root privileges",
-        );
-        return Err(KillSwitchError::NotRoot);
+            vpn_server_ip,
+        )
     }
-
-    // Generate and write pf rules
-    let rules = generate_pf_rules(vpn_interface, vpn_server_ip);
-    let mut file = fs::File::create(PF_CONF_PATH)?;
-    file.write_all(rules.as_bytes())?;
-    logger::log(
-        LogLevel::Debug,
-        "FIREWALL",
-        format!("Wrote pf rules to {PF_CONF_PATH}"),
-    );
-
-    // Load the rules
-    let output = Command::new("pfctl").args(["-f", PF_CONF_PATH]).output()?;
-
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        logger::log(
-            LogLevel::Error,
-            "FIREWALL",
-            format!("pfctl -f failed: {err}"),
-        );
-        return Err(KillSwitchError::CommandFailed(err));
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (vpn_interface, vpn_server_ip);
+        compile_error!("kill switch is only supported on macOS and Linux")
     }
-
-    // Enable pf
-    let output = Command::new("pfctl").args(["-e"]).output()?;
-
-    // pfctl -e returns non-zero if already enabled, which is fine
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        // "pf enabled" or "pf already enabled" are both OK
-        if !stderr.contains("enabled") {
-            logger::log(
-                LogLevel::Error,
-                "FIREWALL",
-                format!("pfctl -e failed: {stderr}"),
-            );
-            return Err(KillSwitchError::CommandFailed(stderr.to_string()));
-        }
-    }
-
-    logger::log(
-        LogLevel::Info,
-        "FIREWALL",
-        "✓ Kill switch ACTIVE - blocking non-VPN traffic",
-    );
-    Ok(())
 }
 
-/// Disable kill switch by flushing pf rules.
+/// Disable kill switch by flushing firewall rules.
 ///
 /// # Errors
 ///
-/// Returns error if not running as root or pf commands fail.
+/// Returns error if not running as root or firewall commands fail.
 pub fn disable_blocking() -> Result<()> {
-    logger::log(LogLevel::Info, "FIREWALL", "Disabling kill switch...");
-
-    if !crate::utils::is_root() {
-        logger::log(
-            LogLevel::Error,
-            "FIREWALL",
-            "Disabling kill switch requires root privileges",
-        );
-        return Err(KillSwitchError::NotRoot);
+    #[cfg(target_os = "macos")]
+    {
+        crate::platform::macos::firewall::PfFirewall::disable_blocking()
     }
-
-    // Flush all rules
-    let output = Command::new("pfctl").args(["-F", "all"]).output()?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        // Ignore "pf not enabled" errors
-        if !stderr.contains("not enabled") {
-            logger::log(
-                LogLevel::Error,
-                "FIREWALL",
-                format!("pfctl -F failed: {stderr}"),
-            );
-            return Err(KillSwitchError::CommandFailed(stderr.to_string()));
-        }
+    #[cfg(target_os = "linux")]
+    {
+        crate::platform::linux::firewall::IptablesFirewall::disable_blocking()
     }
-
-    // Disable pf
-    let _ = Command::new("pfctl").args(["-d"]).output()?;
-
-    // Clean up temp file
-    let _ = fs::remove_file(PF_CONF_PATH);
-
-    logger::log(
-        LogLevel::Info,
-        "FIREWALL",
-        "✓ Kill switch DISABLED - normal traffic restored",
-    );
-    Ok(())
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        compile_error!("kill switch is only supported on macOS and Linux")
+    }
 }
 
 /// Get the state file path.
 fn get_state_path() -> Option<PathBuf> {
-    utils::home_dir().map(|h| h.join(".config").join("vortix").join(STATE_FILE))
+    utils::get_app_config_dir()
+        .ok()
+        .map(|dir| dir.join(constants::KILLSWITCH_STATE_FILE))
 }
 
 /// Persistent state for recovery after crashes.
@@ -309,21 +188,46 @@ pub fn clear_state() {
 mod tests {
     use super::*;
 
+    // pf rules tests are now in platform/macos/firewall.rs
+
     #[test]
-    fn test_generate_pf_rules_with_server() {
-        let rules = generate_pf_rules("utun3", Some("1.2.3.4"));
-        assert!(rules.contains("block all"));
-        assert!(rules.contains("pass quick on lo0"));
-        assert!(rules.contains("192.168.0.0/16"));
-        assert!(rules.contains("pass out quick proto udp to 1.2.3.4"));
-        assert!(rules.contains("pass quick on utun3"));
+    fn test_persisted_state_serialization() {
+        let state = PersistedState {
+            mode: KillSwitchMode::Auto,
+            state: KillSwitchState::Armed,
+            vpn_interface: Some("utun3".to_string()),
+            vpn_server_ip: Some("1.2.3.4".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let deserialized: PersistedState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.mode, KillSwitchMode::Auto);
+        assert_eq!(deserialized.state, KillSwitchState::Armed);
+        assert_eq!(deserialized.vpn_interface, Some("utun3".to_string()));
+        assert_eq!(deserialized.vpn_server_ip, Some("1.2.3.4".to_string()));
     }
 
     #[test]
-    fn test_generate_pf_rules_without_server() {
-        let rules = generate_pf_rules("utun3", None);
-        assert!(rules.contains("block all"));
-        assert!(rules.contains("pass quick on utun3"));
-        assert!(!rules.contains("1.2.3.4"));
+    fn test_persisted_state_deserialization_with_nulls() {
+        let json = r#"{"mode":"Off","state":"Disabled","vpn_interface":null,"vpn_server_ip":null}"#;
+        let state: PersistedState = serde_json::from_str(json).unwrap();
+        assert_eq!(state.mode, KillSwitchMode::Off);
+        assert_eq!(state.state, KillSwitchState::Disabled);
+        assert!(state.vpn_interface.is_none());
+        assert!(state.vpn_server_ip.is_none());
+    }
+
+    #[test]
+    fn test_persisted_state_corrupted_json() {
+        let json = r#"{"mode":"InvalidValue","state":"Disabled"}"#;
+        let result: std::result::Result<PersistedState, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_persisted_state_empty_json() {
+        let result: std::result::Result<PersistedState, _> = serde_json::from_str("{}");
+        assert!(result.is_err());
     }
 }

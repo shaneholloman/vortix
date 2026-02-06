@@ -3,8 +3,6 @@
 //! This module provides helper functions for common operations like
 //! formatting byte rates, durations, and managing configuration directories.
 
-use std::process::Command;
-
 /// Check if the current process is running as root (UID 0)
 ///
 /// Uses the effective user ID from the OS instead of spawning an external command.
@@ -145,12 +143,47 @@ pub fn truncate(s: &str, max_chars: usize) -> String {
 
 /// Returns the current local time formatted as HH:MM:SS.
 ///
-/// Uses `std::process` to call `date` command for local time formatting.
+/// Uses libc `localtime_r` for zero-overhead local time formatting
+/// (called every tick, so avoiding a subprocess matters).
 pub fn format_local_time() -> String {
-    Command::new("date").arg("+%H:%M:%S").output().map_or_else(
-        |_| "00:00:00".to_string(),
-        |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
-    )
+    format_local_time_inner().unwrap_or_else(|| "00:00:00".to_string())
+}
+
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn format_local_time_inner() -> Option<String> {
+    use std::time::SystemTime;
+
+    let secs = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+
+    // SAFETY: localtime_r writes into our stack-allocated `tm` and is
+    // thread-safe (unlike localtime). We pass a valid pointer to both args.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // time_t is i64 on most platforms; u64→i64 is safe until year 2262
+    #[allow(clippy::cast_possible_wrap)]
+    let time_t = secs as libc::time_t;
+    let result = unsafe { libc::localtime_r(&time_t, &mut tm) };
+    if result.is_null() {
+        return None;
+    }
+
+    Some(format!(
+        "{:02}:{:02}:{:02}",
+        tm.tm_hour, tm.tm_min, tm.tm_sec
+    ))
+}
+
+#[cfg(not(unix))]
+fn format_local_time_inner() -> Option<String> {
+    // Non-Unix fallback: shell out to date
+    std::process::Command::new("date")
+        .arg("+%H:%M:%S")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
 /// Formats a `SystemTime` into a compact relative time string (e.g., 1s, 2m, 3h, 4d).
@@ -181,9 +214,37 @@ pub fn format_relative_time(time: std::time::SystemTime) -> String {
 
 /// Returns the user's home directory.
 ///
-/// Uses the HOME environment variable on Unix systems.
+/// Checks `$HOME` first, then falls back to the system password database
+/// via `getpwuid` for containers, cron jobs, and systemd services where
+/// `$HOME` may be unset.
 pub fn home_dir() -> Option<std::path::PathBuf> {
-    std::env::var("HOME").ok().map(std::path::PathBuf::from)
+    std::env::var("HOME")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(home_dir_from_passwd)
+}
+
+/// Fallback: resolve home directory from /etc/passwd via libc.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn home_dir_from_passwd() -> Option<std::path::PathBuf> {
+    // SAFETY: getuid() is always safe; getpwuid() returns a static pointer
+    // that is valid until the next call to any getpw* function. We copy the
+    // data immediately so the pointer is not held across calls.
+    unsafe {
+        let uid = libc::getuid();
+        let pw = libc::getpwuid(uid);
+        if pw.is_null() {
+            return None;
+        }
+        let home = std::ffi::CStr::from_ptr((*pw).pw_dir);
+        home.to_str().ok().map(std::path::PathBuf::from)
+    }
+}
+
+#[cfg(not(unix))]
+fn home_dir_from_passwd() -> Option<std::path::PathBuf> {
+    None
 }
 
 /// Profile metadata for persistence
@@ -231,7 +292,7 @@ pub fn load_profile_metadata() -> Result<std::collections::HashMap<String, Profi
 {
     let metadata_path = get_app_config_dir()
         .map_err(|e| format!("Failed to get config dir: {e}"))?
-        .join("metadata.json");
+        .join(crate::constants::METADATA_FILE_NAME);
 
     if !metadata_path.exists() {
         return Ok(std::collections::HashMap::new());
@@ -260,7 +321,7 @@ pub fn save_profile_metadata(
 ) -> Result<(), String> {
     let metadata_path = get_app_config_dir()
         .map_err(|e| format!("Failed to get config dir: {e}"))?
-        .join("metadata.json");
+        .join(crate::constants::METADATA_FILE_NAME);
 
     let json = serde_json::to_string_pretty(data)
         .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
@@ -434,5 +495,37 @@ mod tests {
         assert!(!is_private_ip("not.an.ip.address"));
         assert!(!is_private_ip("10.0.0"));
         assert!(!is_private_ip(""));
+    }
+
+    #[test]
+    fn test_get_unique_path_no_collision() {
+        let dir = std::env::temp_dir().join("vortix_test_unique_nocol");
+        let _ = std::fs::create_dir_all(&dir);
+        // Clean up any previous files
+        let _ = std::fs::remove_file(dir.join("test.conf"));
+
+        let path = get_unique_path(&dir, "test.conf");
+        assert_eq!(path.file_name().unwrap(), "test.conf");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_get_unique_path_with_collision() {
+        let dir = std::env::temp_dir().join("vortix_test_unique_col");
+        let _ = std::fs::create_dir_all(&dir);
+
+        // Create the file that will collide
+        std::fs::write(dir.join("test.conf"), "existing").unwrap();
+
+        let path = get_unique_path(&dir, "test.conf");
+        assert_eq!(path.file_name().unwrap(), "test(1).conf");
+
+        // Create that too
+        std::fs::write(dir.join("test(1).conf"), "also existing").unwrap();
+        let path2 = get_unique_path(&dir, "test.conf");
+        assert_eq!(path2.file_name().unwrap(), "test(2).conf");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

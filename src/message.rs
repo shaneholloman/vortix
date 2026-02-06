@@ -229,3 +229,74 @@ pub fn get_bulk_actions() -> Vec<ActionMenuItem> {
         },
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sidebar_actions_include_connect() {
+        let actions = get_single_actions(&FocusedPanel::Sidebar);
+        assert!(actions.iter().any(|a| a.key == "c"));
+        assert!(actions.iter().any(|a| a.key == "i"));
+        assert!(actions.iter().any(|a| a.key == "v"));
+        assert!(actions.iter().any(|a| a.key == "DEL"));
+        assert!(actions.iter().any(|a| a.key == "z")); // universal zoom
+    }
+
+    #[test]
+    fn test_logs_actions_include_clear() {
+        let actions = get_single_actions(&FocusedPanel::Logs);
+        assert!(actions.iter().any(|a| a.key == "L"));
+        assert!(actions.iter().any(|a| a.key == "z"));
+    }
+
+    #[test]
+    fn test_connection_details_actions_include_copy_ip() {
+        let actions = get_single_actions(&FocusedPanel::ConnectionDetails);
+        assert!(actions.iter().any(|a| a.key == "y"));
+    }
+
+    #[test]
+    fn test_chart_actions_only_zoom() {
+        let actions = get_single_actions(&FocusedPanel::Chart);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].key, "z");
+    }
+
+    #[test]
+    fn test_security_actions_only_zoom() {
+        let actions = get_single_actions(&FocusedPanel::Security);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].key, "z");
+    }
+
+    #[test]
+    fn test_bulk_actions_contains_essentials() {
+        let actions = get_bulk_actions();
+        assert!(actions.iter().any(|a| a.key == "i")); // import
+        assert!(actions.iter().any(|a| a.key == "D")); // disconnect all
+        assert!(actions.iter().any(|a| a.key == "q")); // quit
+        assert!(actions.iter().any(|a| a.key == "y")); // copy IP
+    }
+
+    #[test]
+    fn test_bulk_actions_count() {
+        let actions = get_bulk_actions();
+        assert_eq!(actions.len(), 7);
+    }
+
+    #[test]
+    fn test_selection_move_variants() {
+        assert_eq!(SelectionMove::Next, SelectionMove::Next);
+        assert_ne!(SelectionMove::Next, SelectionMove::Prev);
+        assert_ne!(SelectionMove::First, SelectionMove::Last);
+    }
+
+    #[test]
+    fn test_scroll_move_variants() {
+        assert_eq!(ScrollMove::Up, ScrollMove::Up);
+        assert_ne!(ScrollMove::Up, ScrollMove::Down);
+        assert_ne!(ScrollMove::Top, ScrollMove::Bottom);
+    }
+}

@@ -248,7 +248,8 @@ fn derive_location_from_name(name: &str) -> String {
 
     // Check for country codes at start (without dash) - more lenient
     // But only match 2-letter codes at the very start
-    if name_lower.len() >= 2 {
+    // Guard against non-ASCII characters (country codes are always ASCII)
+    if name_lower.len() >= 2 && name_lower.is_char_boundary(2) {
         let prefix = &name_lower[..2];
         let rest = &name_lower[2..];
 
@@ -529,5 +530,107 @@ proto udp
 
         // Cleanup
         let _ = std::fs::remove_file(&path);
+    }
+
+    // === Extended config parsing edge cases ===
+
+    #[test]
+    fn test_parse_wireguard_config_with_whitespace_and_comments() {
+        let config = r"
+# This is a WireGuard config with extra whitespace and comments
+
+[Interface]
+  PrivateKey = abc123
+  Address = 10.0.0.2/32
+  DNS = 1.1.1.1
+
+# Peer section
+[Peer]
+  PublicKey = xyz789
+  Endpoint = vpn.example.com:51820
+  AllowedIPs = 0.0.0.0/0, ::/0
+  PersistentKeepalive = 25
+";
+        let path = std::path::Path::new("/tmp/us-east-whitespace.conf");
+        let result = parse_wireguard_config(config, path);
+        assert!(result.is_ok());
+        let (name, _) = result.unwrap();
+        assert_eq!(name, "us-east-whitespace");
+    }
+
+    #[test]
+    fn test_parse_wireguard_config_unusual_endpoint_formats() {
+        // IP:port format
+        let config = "[Peer]\nEndpoint = 1.2.3.4:51820\n";
+        let path = std::path::Path::new("/tmp/ip-endpoint.conf");
+        let result = parse_wireguard_config(config, path);
+        assert!(result.is_ok());
+
+        // IPv6 endpoint: hostname form (still parses before colon)
+        let config2 = "[Peer]\nEndpoint = vpn6.example.com:51820\n";
+        let path2 = std::path::Path::new("/tmp/ipv6-endpoint.conf");
+        let result2 = parse_wireguard_config(config2, path2);
+        assert!(result2.is_ok());
+    }
+
+    #[test]
+    fn test_parse_openvpn_config_with_extras() {
+        let config = r"
+# OpenVPN client config
+; Another comment style
+client
+dev tun
+proto udp
+remote vpn.example.com 1194
+remote-random
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher AES-256-GCM
+auth SHA256
+verb 3
+
+<ca>
+-----BEGIN CERTIFICATE-----
+MIIDqzCCApOgAwIB...
+-----END CERTIFICATE-----
+</ca>
+";
+        let path = std::path::Path::new("/tmp/nl-amsterdam-full.ovpn");
+        let result = parse_openvpn_config(config, path);
+        assert!(result.is_ok());
+        let (name, location) = result.unwrap();
+        assert_eq!(name, "nl-amsterdam-full");
+        assert_eq!(location, "Amsterdam, NL");
+    }
+
+    #[test]
+    fn test_parse_openvpn_config_empty_lines() {
+        let config = "\n\n\nclient\n\n\nremote server.example.com 443\n\n\n";
+        let path = std::path::Path::new("/tmp/sparse.ovpn");
+        let result = parse_openvpn_config(config, path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_wireguard_config_missing_required_fields() {
+        // No [Peer] or Endpoint at all
+        let config = "[Interface]\nPrivateKey = abc123\nAddress = 10.0.0.2/32\n";
+        let path = std::path::Path::new("/tmp/missing-peer.conf");
+        let result = parse_wireguard_config(config, path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No Endpoint"));
+    }
+
+    #[test]
+    fn test_utf8_profile_names() {
+        // Unicode profile name handling
+        let config = "[Peer]\nEndpoint = vpn.example.com:51820\n";
+        let path = std::path::Path::new("/tmp/münchen-vpn.conf");
+        let result = parse_wireguard_config(config, path);
+        assert!(result.is_ok());
+        let (name, _) = result.unwrap();
+        assert_eq!(name, "münchen-vpn");
     }
 }

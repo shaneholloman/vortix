@@ -18,6 +18,7 @@ mod core;
 mod event;
 mod logger;
 mod message;
+mod platform;
 mod state;
 mod theme;
 mod ui;

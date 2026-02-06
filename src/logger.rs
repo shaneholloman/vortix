@@ -203,9 +203,14 @@ macro_rules! log_error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Logger tests must run serially because they share global state.
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_logging() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         clear_logs();
 
         log(LogLevel::Info, "TEST", "Test message");
@@ -218,6 +223,7 @@ mod tests {
 
     #[test]
     fn test_log_level_filtering() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         clear_logs();
         set_min_level(LogLevel::Warning);
 
@@ -235,10 +241,11 @@ mod tests {
 
     #[test]
     fn test_max_entries() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         clear_logs();
 
         for i in 0..1500 {
-            log(LogLevel::Info, "TEST", format!("Message {}", i));
+            log(LogLevel::Info, "TEST", format!("Message {i}"));
         }
 
         let logs = get_logs();
