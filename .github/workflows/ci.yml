@@ -59,6 +59,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install VPN tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y wireguard-tools openvpn
+      - name: Install VPN tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install wireguard-tools openvpn
       - run: cargo test
 
   docs:
