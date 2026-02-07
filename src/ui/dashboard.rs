@@ -1,4 +1,4 @@
-use crate::app::{App, ConnectionState, InputMode, Protocol};
+use crate::app::{App, AuthField, ConnectionState, InputMode, Protocol};
 use ratatui::{
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -108,6 +108,27 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             confirm_selected,
             ..
         } => render_delete_confirm(frame, name, *confirm_selected),
+        InputMode::AuthPrompt {
+            profile_name,
+            username,
+            username_cursor,
+            password,
+            password_cursor,
+            focused_field,
+            save_credentials,
+            connect_after,
+            ..
+        } => render_auth_overlay(
+            frame,
+            profile_name,
+            username,
+            *username_cursor,
+            password,
+            *password_cursor,
+            focused_field,
+            *save_credentials,
+            *connect_after,
+        ),
         InputMode::Normal => {}
     }
 
@@ -218,6 +239,175 @@ fn render_import_overlay(frame: &mut Frame, path: &str, cursor: usize) {
                 format!(" → {}", constants::PROTO_OPENVPN),
                 Style::default().fg(theme::TEXT_SECONDARY),
             ),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(text).alignment(Alignment::Left), inner);
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn render_auth_overlay(
+    frame: &mut Frame,
+    profile_name: &str,
+    username: &str,
+    username_cursor: usize,
+    password: &str,
+    password_cursor: usize,
+    focused_field: &AuthField,
+    save_credentials: bool,
+    connect_after: bool,
+) {
+    let area = frame.area();
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage(25),
+        Constraint::Percentage(50),
+        Constraint::Percentage(25),
+    ])
+    .split(area);
+
+    let popup_area = Layout::horizontal([
+        Constraint::Percentage(20),
+        Constraint::Percentage(60),
+        Constraint::Percentage(20),
+    ])
+    .split(popup_layout[1])[1];
+
+    frame.render_widget(Clear, popup_area);
+
+    let (title, footer) = if connect_after {
+        (constants::TITLE_AUTH_PROMPT, constants::TITLE_AUTH_FOOTER)
+    } else {
+        (
+            constants::TITLE_AUTH_MANAGE,
+            constants::TITLE_AUTH_MANAGE_FOOTER,
+        )
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::ACCENT_PRIMARY))
+        .title(title)
+        .title_bottom(Line::from(footer).centered());
+
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    // Build text cursor helper
+    let make_cursor_line =
+        |text: &str, cursor: usize, is_focused: bool, mask: bool| -> Line<'static> {
+            let display_text: String = if mask {
+                "\u{25CF}".repeat(text.len()) // ● characters
+            } else {
+                text.to_string()
+            };
+
+            let before: String = display_text.chars().take(cursor).collect();
+            let cursor_char: String = display_text
+                .chars()
+                .nth(cursor)
+                .map_or_else(|| "\u{2588}".to_string(), |c| c.to_string()); // █
+            let after: String = display_text.chars().skip(cursor + 1).collect();
+
+            let prompt_style = if is_focused {
+                Style::default().fg(theme::ACCENT_PRIMARY)
+            } else {
+                Style::default().fg(theme::TEXT_SECONDARY)
+            };
+
+            if is_focused {
+                Line::from(vec![
+                    Span::styled(" > ", prompt_style),
+                    Span::styled(before, Style::default().fg(theme::TEXT_PRIMARY)),
+                    Span::styled(
+                        cursor_char,
+                        Style::default()
+                            .fg(theme::ACCENT_SECONDARY)
+                            .add_modifier(Modifier::REVERSED)
+                            .add_modifier(Modifier::SLOW_BLINK),
+                    ),
+                    Span::styled(after, Style::default().fg(theme::TEXT_PRIMARY)),
+                ])
+            } else {
+                let full_text: String = if mask && !text.is_empty() {
+                    "\u{25CF}".repeat(text.len())
+                } else if text.is_empty() {
+                    String::new()
+                } else {
+                    text.to_string()
+                };
+                Line::from(vec![
+                    Span::styled("   ", prompt_style),
+                    Span::styled(full_text, Style::default().fg(theme::INACTIVE)),
+                ])
+            }
+        };
+
+    // Checkbox display
+    let checkbox_focused = *focused_field == AuthField::SaveCheckbox;
+    let checkbox_icon = if save_credentials { "[x]" } else { "[ ]" };
+    let checkbox_style = if checkbox_focused {
+        Style::default()
+            .fg(theme::ACCENT_PRIMARY)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    };
+    let checkbox_label_style = if checkbox_focused {
+        Style::default().fg(theme::TEXT_PRIMARY)
+    } else {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    };
+
+    let text = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Profile: ", Style::default().fg(theme::TEXT_SECONDARY)),
+            Span::styled(
+                profile_name.to_string(),
+                Style::default()
+                    .fg(theme::ACCENT_PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" (OpenVPN)", Style::default().fg(theme::TEXT_SECONDARY)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Username:",
+            if *focused_field == AuthField::Username {
+                Style::default()
+                    .fg(theme::TEXT_PRIMARY)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme::TEXT_SECONDARY)
+            },
+        )),
+        make_cursor_line(
+            username,
+            username_cursor,
+            *focused_field == AuthField::Username,
+            false,
+        ),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Password:",
+            if *focused_field == AuthField::Password {
+                Style::default()
+                    .fg(theme::TEXT_PRIMARY)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme::TEXT_SECONDARY)
+            },
+        )),
+        make_cursor_line(
+            password,
+            password_cursor,
+            *focused_field == AuthField::Password,
+            true,
+        ),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(format!("  {checkbox_icon} "), checkbox_style),
+            Span::styled("Save credentials for future sessions", checkbox_label_style),
         ]),
     ];
 
@@ -431,11 +621,11 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
         return;
     }
 
-    let active_profile = match &app.connection_state {
-        ConnectionState::Connected { profile, .. }
-        | ConnectionState::Connecting { profile, .. }
-        | ConnectionState::Disconnecting { profile, .. } => Some(profile.clone()),
-        ConnectionState::Disconnected => None,
+    let (active_profile, active_color) = match &app.connection_state {
+        ConnectionState::Connected { profile, .. } => (Some(profile.clone()), theme::SUCCESS),
+        ConnectionState::Connecting { profile, .. }
+        | ConnectionState::Disconnecting { profile, .. } => (Some(profile.clone()), theme::WARNING),
+        ConnectionState::Disconnected => (None, Color::Reset),
     };
 
     let items: Vec<Row> = app
@@ -447,9 +637,9 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             let is_active = active_profile.as_ref() == Some(&p.name);
             let is_never_used = p.last_used.is_none();
 
-            // Status indicator
+            // Status indicator — color matches connection state (green=connected, yellow=transitioning)
             let (status_char, status_color) = if is_active {
-                ("●", theme::SUCCESS)
+                ("●", active_color)
             } else {
                 (" ", Color::Reset)
             };
@@ -459,7 +649,7 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
                     .fg(theme::ROW_SELECTED_FG)
                     .add_modifier(Modifier::BOLD)
             } else if is_active {
-                Style::default().fg(theme::SUCCESS)
+                Style::default().fg(active_color)
             } else if is_never_used {
                 Style::default().fg(Color::DarkGray)
             } else {
@@ -472,7 +662,7 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
                 crate::app::Protocol::OpenVPN => "O",
             };
             let proto_color = if is_active {
-                theme::SUCCESS
+                active_color
             } else if is_selected {
                 theme::ACCENT_PRIMARY
             } else {

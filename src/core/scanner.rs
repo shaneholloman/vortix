@@ -63,7 +63,7 @@ pub fn get_active_profiles(profiles: &[VpnProfile]) -> Vec<ActiveSession> {
                 openvpn_pids
                     .iter()
                     .find(|(path, _)| path.contains(path_str) || path_str.contains(*path))
-                    .map(|(_, &pid)| check_openvpn_by_pid(pid, &profile.config_path))
+                    .and_then(|(_, &pid)| check_openvpn_by_pid(pid, &profile.config_path))
             }
         };
 
@@ -87,7 +87,8 @@ fn get_all_openvpn_pids() -> std::collections::HashMap<String, u32> {
         for line in stdout.lines().skip(1) {
             // Skip header
             let line = line.trim();
-            if line.contains("openvpn") && line.contains(".ovpn") {
+            // Match any openvpn process with --config (covers .ovpn, .conf, and any extension)
+            if line.contains("openvpn") && line.contains("--config") {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
                     if let Ok(pid) = parts[0].parse::<u32>() {
@@ -206,7 +207,10 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
     Some(session)
 }
 
-/// Checks if an `OpenVPN` process is running for the given config file.
+/// Checks if an `OpenVPN` process is running AND has an active tunnel.
+///
+/// Returns `None` if the process is running but no tun/tap interface is
+/// detected — this means `OpenVPN` is still negotiating or has failed silently.
 ///
 /// Extracts detailed session information including:
 /// - Process start time from `ps` command
@@ -214,7 +218,7 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
 /// - MTU from the interface
 /// - Remote endpoint from process args or config file
 #[allow(clippy::too_many_lines)]
-fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
+fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> Option<ActiveSession> {
     let mut session = ActiveSession {
         pid: Some(pid),
         ..Default::default()
@@ -378,9 +382,16 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
         session.interface = detected_iface;
     }
 
-    // If we couldn't get internal IP, show process is active
-    if session.internal_ip.is_empty() {
-        session.internal_ip = "Active".to_string();
+    // No tun/tap interface means OpenVPN is running but NOT connected yet
+    // (still negotiating TLS, authenticating, or has failed silently).
+    // Don't report this as an active session — the scanner will re-check next tick.
+    if session.interface.is_empty() {
+        crate::logger::log(
+            crate::logger::LogLevel::Debug,
+            "SCANNER",
+            format!("OpenVPN pid {pid} running but no tunnel interface detected yet"),
+        );
+        return None;
     }
 
     // Try to get remote server from process arguments first
@@ -433,7 +444,7 @@ fn check_openvpn_by_pid(pid: u32, config_path: &Path) -> ActiveSession {
         }
     }
 
-    session
+    Some(session)
 }
 
 /// Parse ps etime format: [[dd-]hh:]mm:ss or just ss for very short uptimes

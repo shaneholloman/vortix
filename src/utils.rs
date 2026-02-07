@@ -123,6 +123,181 @@ pub fn get_profiles_dir() -> std::io::Result<std::path::PathBuf> {
     Ok(path)
 }
 
+/// Returns the `OpenVPN` runtime directory path for a given profile.
+///
+/// Creates `~/.config/vortix/run/` if it doesn't exist.
+/// Returns `(pid_path, log_path)` for the given profile name.
+///
+/// # Errors
+///
+/// Returns an error if directory creation fails.
+pub fn get_openvpn_run_paths(
+    profile_name: &str,
+) -> std::io::Result<(std::path::PathBuf, std::path::PathBuf)> {
+    let root = get_app_config_dir()?;
+    let run_dir = root.join(crate::constants::OPENVPN_RUN_DIR);
+
+    if !run_dir.exists() {
+        std::fs::create_dir_all(&run_dir)?;
+    }
+
+    // Sanitize profile name for use in filenames
+    let safe_name: String = profile_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    let pid_path = run_dir.join(format!("{safe_name}.pid"));
+    let log_path = run_dir.join(format!("{safe_name}.log"));
+
+    Ok((pid_path, log_path))
+}
+
+/// Cleans up `OpenVPN` runtime files (pid, log) for a given profile.
+pub fn cleanup_openvpn_run_files(profile_name: &str) {
+    if let Ok((pid_path, log_path)) = get_openvpn_run_paths(profile_name) {
+        let _ = std::fs::remove_file(&pid_path);
+        let _ = std::fs::remove_file(&log_path);
+    }
+}
+
+/// Reads the PID from an `OpenVPN` pid file.
+pub fn read_openvpn_pid(profile_name: &str) -> Option<u32> {
+    let (pid_path, _) = get_openvpn_run_paths(profile_name).ok()?;
+    let content = std::fs::read_to_string(&pid_path).ok()?;
+    content.trim().parse::<u32>().ok()
+}
+
+/// Returns the path for an `OpenVPN` auth credentials file.
+///
+/// Creates `~/.config/vortix/auth/` if it doesn't exist.
+///
+/// # Errors
+///
+/// Returns an error if directory creation fails.
+pub fn get_openvpn_auth_path(profile_name: &str) -> std::io::Result<std::path::PathBuf> {
+    let root = get_app_config_dir()?;
+    let auth_dir = root.join(crate::constants::OPENVPN_AUTH_DIR);
+
+    if !auth_dir.exists() {
+        std::fs::create_dir_all(&auth_dir)?;
+    }
+
+    let safe_name: String = profile_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    Ok(auth_dir.join(format!("{safe_name}.auth")))
+}
+
+/// Writes `OpenVPN` credentials to a file (username on line 1, password on line 2).
+///
+/// The file is created with `chmod 600` (owner read/write only).
+///
+/// # Errors
+///
+/// Returns an error if file write or permission setting fails.
+#[cfg(unix)]
+pub fn write_openvpn_auth_file(
+    profile_name: &str,
+    username: &str,
+    password: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let auth_path = get_openvpn_auth_path(profile_name)?;
+    std::fs::write(&auth_path, format!("{username}\n{password}\n"))?;
+
+    let mut perms = std::fs::metadata(&auth_path)?.permissions();
+    perms.set_mode(0o600);
+    std::fs::set_permissions(&auth_path, perms)?;
+
+    Ok(auth_path)
+}
+
+/// Writes `OpenVPN` credentials to a file (non-Unix fallback, no chmod).
+#[cfg(not(unix))]
+pub fn write_openvpn_auth_file(
+    profile_name: &str,
+    username: &str,
+    password: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    let auth_path = get_openvpn_auth_path(profile_name)?;
+    std::fs::write(&auth_path, format!("{username}\n{password}\n"))?;
+    Ok(auth_path)
+}
+
+/// Reads saved `OpenVPN` credentials from the auth file.
+///
+/// Returns `Some((username, password))` if a valid auth file exists.
+pub fn read_openvpn_saved_auth(profile_name: &str) -> Option<(String, String)> {
+    let auth_path = get_openvpn_auth_path(profile_name).ok()?;
+    let content = std::fs::read_to_string(&auth_path).ok()?;
+    let mut lines = content.lines();
+    let username = lines.next()?.to_string();
+    let password = lines.next()?.to_string();
+    if username.is_empty() || password.is_empty() {
+        return None;
+    }
+    Some((username, password))
+}
+
+/// Deletes the saved `OpenVPN` auth credentials file for a profile.
+pub fn delete_openvpn_auth_file(profile_name: &str) {
+    if let Ok(auth_path) = get_openvpn_auth_path(profile_name) {
+        let _ = std::fs::remove_file(&auth_path);
+    }
+}
+
+/// Checks whether an `OpenVPN` config file contains `auth-user-pass` without a file argument.
+///
+/// Returns `true` if the config has a bare `auth-user-pass` directive (meaning
+/// `OpenVPN` will prompt for credentials on stdin). Returns `false` if:
+/// - The directive is absent
+/// - The directive has a file path argument (`auth-user-pass /path/to/file`)
+/// - The directive is commented out (`# auth-user-pass`)
+pub fn openvpn_config_needs_auth(config_path: &std::path::Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(config_path) else {
+        return false;
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Skip comments and empty lines
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+            continue;
+        }
+        // Check for the directive
+        if trimmed == crate::constants::OVPN_AUTH_USER_PASS {
+            // Bare directive with no file argument
+            return true;
+        }
+        if let Some(rest) = trimmed.strip_prefix(crate::constants::OVPN_AUTH_USER_PASS) {
+            // Only whitespace after directive = bare (OpenVPN will prompt)
+            if rest.trim().is_empty() {
+                return true;
+            }
+            // Has a file argument = no prompt needed
+            return false;
+        }
+    }
+
+    false
+}
+
 /// Truncates a string to a maximum number of characters.
 ///
 /// If the string exceeds `max_chars`, it is truncated and "..." is appended.
@@ -527,5 +702,143 @@ mod tests {
         assert_eq!(path2.file_name().unwrap(), "test(2).conf");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // === OpenVPN auth-user-pass detection tests ===
+
+    #[test]
+    fn test_openvpn_config_needs_auth_bare_directive() {
+        let dir = std::env::temp_dir().join("vortix_test_auth_bare");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.ovpn");
+        std::fs::write(
+            &path,
+            "client\nremote example.com 1194\nauth-user-pass\ndev tun\n",
+        )
+        .unwrap();
+        assert!(openvpn_config_needs_auth(&path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_openvpn_config_needs_auth_bare_with_trailing_space() {
+        let dir = std::env::temp_dir().join("vortix_test_auth_trail");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.ovpn");
+        std::fs::write(
+            &path,
+            "client\nremote example.com 1194\nauth-user-pass   \ndev tun\n",
+        )
+        .unwrap();
+        assert!(openvpn_config_needs_auth(&path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_openvpn_config_needs_auth_with_file_arg() {
+        let dir = std::env::temp_dir().join("vortix_test_auth_file");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.ovpn");
+        std::fs::write(
+            &path,
+            "client\nremote example.com 1194\nauth-user-pass /etc/openvpn/creds.txt\ndev tun\n",
+        )
+        .unwrap();
+        assert!(!openvpn_config_needs_auth(&path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_openvpn_config_needs_auth_absent() {
+        let dir = std::env::temp_dir().join("vortix_test_auth_absent");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.ovpn");
+        std::fs::write(
+            &path,
+            "client\nremote example.com 1194\ndev tun\nproto udp\n",
+        )
+        .unwrap();
+        assert!(!openvpn_config_needs_auth(&path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_openvpn_config_needs_auth_commented_out() {
+        let dir = std::env::temp_dir().join("vortix_test_auth_comment");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test.ovpn");
+        std::fs::write(
+            &path,
+            "client\nremote example.com 1194\n# auth-user-pass\n; auth-user-pass\ndev tun\n",
+        )
+        .unwrap();
+        assert!(!openvpn_config_needs_auth(&path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_openvpn_config_needs_auth_nonexistent_file() {
+        let path = std::path::PathBuf::from("/tmp/nonexistent_vortix_config_12345.ovpn");
+        assert!(!openvpn_config_needs_auth(&path));
+    }
+
+    // === OpenVPN auth file write/read tests ===
+
+    #[test]
+    fn test_write_read_openvpn_auth_file() {
+        let name = "test_auth_roundtrip";
+        // Write
+        let result = write_openvpn_auth_file(name, "myuser", "mypass");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.exists());
+
+        // Read
+        let creds = read_openvpn_saved_auth(name);
+        assert!(creds.is_some());
+        let (user, pass) = creds.unwrap();
+        assert_eq!(user, "myuser");
+        assert_eq!(pass, "mypass");
+
+        // Clean up
+        delete_openvpn_auth_file(name);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_auth_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let name = "test_auth_perms";
+        let result = write_openvpn_auth_file(name, "user", "pass");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+
+        let perms = std::fs::metadata(&path).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o600);
+
+        delete_openvpn_auth_file(name);
+    }
+
+    #[test]
+    fn test_read_openvpn_saved_auth_missing_file() {
+        let creds = read_openvpn_saved_auth("nonexistent_profile_xyz_12345");
+        assert!(creds.is_none());
+    }
+
+    #[test]
+    fn test_read_openvpn_saved_auth_empty_creds() {
+        let name = "test_auth_empty_creds";
+        // Write empty username
+        let path = get_openvpn_auth_path(name).unwrap();
+        std::fs::write(&path, "\npassword\n").unwrap();
+        assert!(read_openvpn_saved_auth(name).is_none());
+
+        // Write empty password
+        std::fs::write(&path, "username\n\n").unwrap();
+        assert!(read_openvpn_saved_auth(name).is_none());
+
+        delete_openvpn_auth_file(name);
     }
 }

@@ -22,8 +22,19 @@ pub enum FocusedPanel {
     Logs,
 }
 
+/// Which field is focused in the auth credentials overlay.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum AuthField {
+    /// Username text input.
+    Username,
+    /// Password text input (masked).
+    Password,
+    /// "Save credentials" checkbox.
+    SaveCheckbox,
+}
+
 /// Current input mode determining keyboard behavior.
-#[derive(Clone, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum InputMode {
     /// Normal navigation mode.
     #[default]
@@ -55,6 +66,27 @@ pub enum InputMode {
         name: String,
         /// Is "Yes" selected?
         confirm_selected: bool,
+    },
+    /// `OpenVPN` authentication credentials dialog.
+    AuthPrompt {
+        /// Index of the profile requiring auth.
+        profile_idx: usize,
+        /// Name of the profile (for display).
+        profile_name: String,
+        /// Username input.
+        username: String,
+        /// Cursor position in the username field.
+        username_cursor: usize,
+        /// Password input.
+        password: String,
+        /// Cursor position in the password field.
+        password_cursor: usize,
+        /// Which field is currently focused.
+        focused_field: AuthField,
+        /// Whether to persist credentials for future sessions.
+        save_credentials: bool,
+        /// Whether to auto-connect after submitting (false = save-only mode).
+        connect_after: bool,
     },
 }
 

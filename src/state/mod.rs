@@ -15,4 +15,4 @@ mod ui;
 pub use connection::{ConnectionState, DetailedConnectionInfo};
 pub use killswitch::{KillSwitchMode, KillSwitchState};
 pub use profile::{Protocol, VpnProfile};
-pub use ui::{FocusedPanel, InputMode, Toast, ToastType, DISMISS_DURATION};
+pub use ui::{AuthField, FocusedPanel, InputMode, Toast, ToastType, DISMISS_DURATION};

@@ -129,6 +129,25 @@ pub enum Message {
     /// Import profile from path
     Import(String),
 
+    // === Authentication ===
+    /// Submit credentials from the auth prompt overlay
+    AuthSubmit {
+        /// Profile index to connect after saving credentials
+        idx: usize,
+        /// Username entered by the user
+        username: String,
+        /// Password entered by the user
+        password: String,
+        /// Whether to persist credentials for future sessions
+        save: bool,
+        /// Whether to auto-connect after saving (false = save-only from manage flow)
+        connect_after: bool,
+    },
+    /// Open the auth credentials manager for the selected profile (edit/view/clear)
+    ManageAuth,
+    /// Clear saved credentials for the selected profile
+    ClearAuth,
+
     // === Kill Switch ===
     /// Toggle kill switch mode (Off → Auto → `AlwaysOn` → Off)
     ToggleKillSwitch,
@@ -171,6 +190,16 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
                 key: "v",
                 label: "View Configuration",
                 message: Message::OpenConfig,
+            });
+            actions.push(ActionMenuItem {
+                key: "a",
+                label: "Edit Auth Credentials",
+                message: Message::ManageAuth,
+            });
+            actions.push(ActionMenuItem {
+                key: "A",
+                label: "Clear Auth Credentials",
+                message: Message::ClearAuth,
             });
             actions.push(ActionMenuItem {
                 key: "DEL",
@@ -258,6 +287,8 @@ mod tests {
         assert!(actions.iter().any(|a| a.key == "c"));
         assert!(actions.iter().any(|a| a.key == "i"));
         assert!(actions.iter().any(|a| a.key == "v"));
+        assert!(actions.iter().any(|a| a.key == "a")); // edit auth credentials
+        assert!(actions.iter().any(|a| a.key == "A")); // clear auth credentials
         assert!(actions.iter().any(|a| a.key == "DEL"));
         assert!(actions.iter().any(|a| a.key == "z")); // universal zoom
     }

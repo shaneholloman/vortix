@@ -20,8 +20,8 @@ use crate::utils;
 
 // Re-export state types for convenient access
 pub use crate::state::{
-    ConnectionState, DetailedConnectionInfo, FocusedPanel, InputMode, Protocol, Toast, ToastType,
-    VpnProfile, DISMISS_DURATION,
+    AuthField, ConnectionState, DetailedConnectionInfo, FocusedPanel, InputMode, Protocol, Toast,
+    ToastType, VpnProfile, DISMISS_DURATION,
 };
 
 /// Main application state container.
@@ -259,6 +259,12 @@ impl App {
             return;
         }
 
+        // 2. Dismiss toast on Esc
+        if key.code == KeyCode::Esc && self.toast.is_some() {
+            self.toast = None;
+            return;
+        }
+
         // 3. Global: Handle Config View - scroll or close
         if self.show_config {
             match key.code {
@@ -298,6 +304,44 @@ impl App {
                 self.handle_input_import(key, &mut path, &mut cursor);
                 if let InputMode::Import { .. } = self.input_mode {
                     self.input_mode = InputMode::Import { path, cursor };
+                }
+            }
+            InputMode::AuthPrompt {
+                profile_idx,
+                profile_name,
+                mut username,
+                mut username_cursor,
+                mut password,
+                mut password_cursor,
+                mut focused_field,
+                mut save_credentials,
+                connect_after,
+            } => {
+                self.handle_input_auth(
+                    key,
+                    profile_idx,
+                    &profile_name,
+                    &mut username,
+                    &mut username_cursor,
+                    &mut password,
+                    &mut password_cursor,
+                    &mut focused_field,
+                    &mut save_credentials,
+                    connect_after,
+                );
+                // Update state if still in AuthPrompt mode
+                if let InputMode::AuthPrompt { .. } = self.input_mode {
+                    self.input_mode = InputMode::AuthPrompt {
+                        profile_idx,
+                        profile_name,
+                        username,
+                        username_cursor,
+                        password,
+                        password_cursor,
+                        focused_field,
+                        save_credentials,
+                        connect_after,
+                    };
                 }
             }
             InputMode::DependencyError { .. } | InputMode::PermissionDenied { .. } => {
@@ -469,6 +513,108 @@ impl App {
         }
     }
 
+    /// Handle keyboard input for the auth credentials overlay.
+    #[allow(clippy::too_many_arguments)]
+    fn handle_input_auth(
+        &mut self,
+        key: KeyEvent,
+        profile_idx: usize,
+        _profile_name: &str,
+        username: &mut String,
+        username_cursor: &mut usize,
+        password: &mut String,
+        password_cursor: &mut usize,
+        focused_field: &mut AuthField,
+        save_credentials: &mut bool,
+        connect_after: bool,
+    ) {
+        match key.code {
+            KeyCode::Esc => self.handle_message(Message::CloseOverlay),
+            KeyCode::Tab | KeyCode::BackTab => {
+                // Cycle through fields: Username -> Password -> SaveCheckbox -> Username
+                *focused_field = match (&focused_field, key.code) {
+                    (AuthField::Username, KeyCode::Tab)
+                    | (AuthField::SaveCheckbox, KeyCode::BackTab) => AuthField::Password,
+                    (AuthField::Password, KeyCode::Tab)
+                    | (AuthField::Username, KeyCode::BackTab) => AuthField::SaveCheckbox,
+                    (AuthField::SaveCheckbox, KeyCode::Tab)
+                    | (AuthField::Password, KeyCode::BackTab) => AuthField::Username,
+                    _ => focused_field.clone(),
+                };
+            }
+            KeyCode::Enter => {
+                // On SaveCheckbox, toggle the checkbox instead of submitting
+                if *focused_field == AuthField::SaveCheckbox {
+                    *save_credentials = !*save_credentials;
+                    return;
+                }
+                // Require both fields to be non-empty
+                if username.is_empty() || password.is_empty() {
+                    self.show_toast(
+                        "Both username and password are required".to_string(),
+                        ToastType::Warning,
+                    );
+                    return;
+                }
+                self.handle_message(Message::AuthSubmit {
+                    idx: profile_idx,
+                    username: username.clone(),
+                    password: password.clone(),
+                    save: *save_credentials,
+                    connect_after,
+                });
+            }
+            KeyCode::Char(' ') if *focused_field == AuthField::SaveCheckbox => {
+                *save_credentials = !*save_credentials;
+            }
+            _ => {
+                // Route text editing to the focused field
+                let (text, cursor) = match focused_field {
+                    AuthField::Username => (username, username_cursor),
+                    AuthField::Password => (password, password_cursor),
+                    AuthField::SaveCheckbox => return, // No text editing on checkbox
+                };
+                Self::handle_text_field_input(key, text, cursor);
+            }
+        }
+    }
+
+    /// Generic text field input handler for cursor movement and editing.
+    fn handle_text_field_input(key: KeyEvent, text: &mut String, cursor: &mut usize) {
+        match key.code {
+            KeyCode::Left => {
+                *cursor = cursor.saturating_sub(1);
+            }
+            KeyCode::Right => {
+                if *cursor < text.len() {
+                    *cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                *cursor = 0;
+            }
+            KeyCode::End => {
+                *cursor = text.len();
+            }
+            KeyCode::Backspace => {
+                if *cursor > 0 {
+                    text.remove(*cursor - 1);
+                    *cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                if *cursor < text.len() {
+                    text.remove(*cursor);
+                }
+            }
+            KeyCode::Char(c) => {
+                text.insert(*cursor, c);
+                *cursor += 1;
+            }
+            _ => {}
+        }
+    }
+
     fn handle_normal_keys(&mut self, key: KeyEvent) {
         match key.code {
             // Global Toggles
@@ -562,6 +708,8 @@ impl App {
                         );
                     }
                 }
+                KeyCode::Char('a') => self.handle_message(Message::ManageAuth),
+                KeyCode::Char('A') => self.handle_message(Message::ClearAuth),
                 _ => {}
             },
             FocusedPanel::Logs => {
@@ -664,14 +812,21 @@ impl App {
                 }
             }
             KeyCode::Char(c) => {
-                // Direct key press to execute action (case-insensitive for convenience)
-                if let Some(item) = actions.iter().find(|a| {
-                    a.key.len() == 1
-                        && a.key
-                            .chars()
-                            .next()
-                            .is_some_and(|kc| kc.eq_ignore_ascii_case(&c))
-                }) {
+                // Try exact (case-sensitive) match first, fall back to case-insensitive.
+                // This allows a/A to be distinct keys while keeping i/I convenience.
+                let item = actions
+                    .iter()
+                    .find(|a| a.key.len() == 1 && a.key.starts_with(c))
+                    .or_else(|| {
+                        actions.iter().find(|a| {
+                            a.key.len() == 1
+                                && a.key
+                                    .chars()
+                                    .next()
+                                    .is_some_and(|kc| kc.eq_ignore_ascii_case(&c))
+                        })
+                    });
+                if let Some(item) = item {
                     let msg = item.message.clone();
                     self.show_action_menu = false;
                     self.show_bulk_menu = false;
@@ -712,6 +867,72 @@ impl App {
             Message::OpenConfig => {
                 if self.profile_list_state.selected().is_some() {
                     self.show_config = true;
+                }
+            }
+            Message::ManageAuth => {
+                if let Some(idx) = self.profile_list_state.selected() {
+                    if let Some(profile) = self.profiles.get(idx) {
+                        if !matches!(profile.protocol, Protocol::OpenVPN) {
+                            self.show_toast(
+                                "Auth credentials only apply to OpenVPN profiles".to_string(),
+                                ToastType::Info,
+                            );
+                        } else if !utils::openvpn_config_needs_auth(&profile.config_path) {
+                            self.show_toast(
+                                "This profile does not use auth-user-pass".to_string(),
+                                ToastType::Info,
+                            );
+                        } else {
+                            // Pre-fill with existing credentials if saved
+                            let (username, password) =
+                                utils::read_openvpn_saved_auth(&profile.name).unwrap_or_default();
+                            let username_cursor = username.len();
+                            let password_cursor = password.len();
+                            self.input_mode = InputMode::AuthPrompt {
+                                profile_idx: idx,
+                                profile_name: profile.name.clone(),
+                                username,
+                                username_cursor,
+                                password,
+                                password_cursor,
+                                focused_field: crate::state::AuthField::Username,
+                                save_credentials: true,
+                                connect_after: false,
+                            };
+                        }
+                    }
+                }
+            }
+            Message::ClearAuth => {
+                if let Some(idx) = self.profile_list_state.selected() {
+                    if let Some(profile) = self.profiles.get(idx) {
+                        let is_openvpn = matches!(profile.protocol, Protocol::OpenVPN);
+                        let has_auth = utils::openvpn_config_needs_auth(&profile.config_path);
+                        let name = profile.name.clone();
+                        if !is_openvpn {
+                            self.show_toast(
+                                "Auth credentials only apply to OpenVPN profiles".to_string(),
+                                ToastType::Info,
+                            );
+                        } else if !has_auth {
+                            self.show_toast(
+                                "This profile does not use auth-user-pass".to_string(),
+                                ToastType::Info,
+                            );
+                        } else if utils::read_openvpn_saved_auth(&name).is_none() {
+                            self.show_toast(
+                                format!("No saved credentials for '{name}'"),
+                                ToastType::Info,
+                            );
+                        } else {
+                            utils::delete_openvpn_auth_file(&name);
+                            self.log(&format!("AUTH: Cleared saved credentials for '{name}'"));
+                            self.show_toast(
+                                format!("Credentials cleared for '{name}'"),
+                                ToastType::Success,
+                            );
+                        }
+                    }
                 }
             }
             Message::OpenDelete(idx) => {
@@ -780,7 +1001,19 @@ impl App {
                 success,
                 error,
             } => {
-                if success {
+                // Ignore stale results if we're no longer in Connecting state for this profile.
+                // This prevents spurious errors when the connect polling thread outlives a
+                // disconnect (e.g., user disconnects while log polling is still running).
+                let still_connecting = matches!(
+                    &self.connection_state,
+                    ConnectionState::Connecting { profile: p, .. } if *p == profile
+                );
+                if !still_connecting {
+                    self.log(&format!(
+                        "CMD: Ignoring stale ConnectResult for '{profile}' \
+                         (state is no longer Connecting)"
+                    ));
+                } else if success {
                     self.log(&format!("CMD: Successfully started VPN for '{profile}'"));
                     // Keep state as Connecting -- the scanner will promote to Connected
                     // once the interface appears.
@@ -848,6 +1081,67 @@ impl App {
             },
 
             // Kill Switch
+            Message::AuthSubmit {
+                idx,
+                username,
+                password,
+                save,
+                connect_after,
+            } => {
+                // Close the overlay first
+                self.input_mode = InputMode::Normal;
+
+                // Get profile name for file path
+                let profile_name = self
+                    .profiles
+                    .get(idx)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+
+                if profile_name.is_empty() {
+                    self.show_toast("Invalid profile index".to_string(), ToastType::Error);
+                    return;
+                }
+
+                // Write credentials to auth file
+                match utils::write_openvpn_auth_file(&profile_name, &username, &password) {
+                    Ok(_) => {
+                        if save {
+                            self.log(&format!("AUTH: Saved credentials for '{profile_name}'"));
+                        } else {
+                            self.log(&format!(
+                                "AUTH: Using one-time credentials for '{profile_name}'"
+                            ));
+                        }
+
+                        if connect_after {
+                            // Now connect -- saved creds will be found by connect_profile
+                            self.connect_profile(idx);
+
+                            // If user chose not to save, clean up after connect starts
+                            if !save {
+                                // Schedule cleanup -- the connect thread has already read the
+                                // path, so we can remove it after a brief delay. However,
+                                // since OpenVPN reads it during fork, we defer cleanup to
+                                // the disconnect handler instead.
+                            }
+                        } else {
+                            // Save-only mode (from ManageAuth)
+                            self.show_toast(
+                                format!("Credentials updated for '{profile_name}'"),
+                                ToastType::Success,
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        self.show_toast(
+                            format!("Failed to write auth file: {e}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            }
+
             Message::ToggleKillSwitch => {
                 use crate::state::KillSwitchMode;
 
@@ -1374,8 +1668,10 @@ impl App {
             return;
         }
 
-        // Get config path before removing
+        // Get profile info before removing
         let config_path = self.profiles[idx].config_path.clone();
+        let profile_name = self.profiles[idx].name.clone();
+        let protocol = self.profiles[idx].protocol;
 
         // Remove from profiles
         self.profiles.remove(idx);
@@ -1383,6 +1679,12 @@ impl App {
         // Try to delete from disk
         if config_path.exists() {
             let _ = std::fs::remove_file(&config_path);
+        }
+
+        // Clean up OpenVPN auth and runtime files
+        if matches!(protocol, Protocol::OpenVPN) {
+            utils::delete_openvpn_auth_file(&profile_name);
+            utils::cleanup_openvpn_run_files(&profile_name);
         }
 
         // Adjust selection
@@ -1506,6 +1808,7 @@ impl App {
     }
 
     /// Connect to a profile
+    #[allow(clippy::too_many_lines)]
     fn connect_profile(&mut self, idx: usize) {
         // Clone needed data to release borrow on self
         let (name, protocol, config_path, cmd_tx) = if let Some(profile) = self.profiles.get(idx) {
@@ -1534,6 +1837,27 @@ impl App {
             return;
         }
 
+        // Check if OpenVPN config needs auth credentials
+        if matches!(protocol, Protocol::OpenVPN) && utils::openvpn_config_needs_auth(&config_path) {
+            // Check for saved credentials first
+            if utils::read_openvpn_saved_auth(&name).is_none() {
+                // No saved creds -- show the auth prompt overlay
+                self.input_mode = InputMode::AuthPrompt {
+                    profile_idx: idx,
+                    profile_name: name,
+                    username: String::new(),
+                    username_cursor: 0,
+                    password: String::new(),
+                    password_cursor: 0,
+                    focused_field: crate::state::AuthField::Username,
+                    save_credentials: true,
+                    connect_after: true,
+                };
+                return;
+            }
+            // Saved creds exist -- they'll be picked up in the thread below
+        }
+
         // Start connecting
         self.connection_state = ConnectionState::Connecting {
             started: Instant::now(),
@@ -1542,42 +1866,208 @@ impl App {
         self.log(&format!("ACTION: Connecting to '{name}' [{protocol}]..."));
 
         // Execute command in background to prevent TUI freeze
-        std::thread::spawn(move || {
-            let output = match protocol {
-                Protocol::WireGuard => std::process::Command::new("wg-quick")
+        std::thread::spawn(move || match protocol {
+            Protocol::WireGuard => {
+                // wg-quick is a one-shot command: sets up interface and exits
+                match std::process::Command::new("wg-quick")
                     .args(["up", config_path.to_str().unwrap_or("")])
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
-                    .output(),
-                Protocol::OpenVPN => std::process::Command::new("openvpn")
-                    .args(["--config", config_path.to_str().unwrap_or(""), "--daemon"])
+                    .output()
+                {
+                    Ok(out) if out.status.success() => {
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: true,
+                            error: None,
+                        });
+                    }
+                    Ok(out) => {
+                        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: false,
+                            error: Some(format!("WireGuard: {stderr}")),
+                        });
+                    }
+                    Err(e) => {
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: false,
+                            error: Some(format!("Failed to execute wg-quick: {e}")),
+                        });
+                    }
+                }
+            }
+            Protocol::OpenVPN => {
+                // OpenVPN is designed to run as a daemon. We use --daemon with
+                // --writepid and --log so we can track the process and poll the
+                // log for definitive success/failure markers.
+                let run_paths = crate::utils::get_openvpn_run_paths(&name);
+                let (pid_path, log_path) = match run_paths {
+                    Ok(paths) => paths,
+                    Err(e) => {
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: false,
+                            error: Some(format!("Failed to create run directory: {e}")),
+                        });
+                        return;
+                    }
+                };
+
+                // Clean up stale files from previous runs
+                let _ = std::fs::remove_file(&pid_path);
+                let _ = std::fs::remove_file(&log_path);
+
+                // Build openvpn args
+                let mut args = vec![
+                    "--config".to_string(),
+                    config_path.to_str().unwrap_or("").to_string(),
+                    "--daemon".to_string(),
+                    format!("vortix-{name}"),
+                    "--writepid".to_string(),
+                    pid_path.to_str().unwrap_or("").to_string(),
+                    "--log".to_string(),
+                    log_path.to_str().unwrap_or("").to_string(),
+                    "--verb".to_string(),
+                    "3".to_string(),
+                ];
+
+                // If auth credentials exist, pass them via --auth-user-pass
+                if let Ok(auth_path) = crate::utils::get_openvpn_auth_path(&name) {
+                    if auth_path.exists() {
+                        args.push("--auth-user-pass".to_string());
+                        args.push(auth_path.to_str().unwrap_or("").to_string());
+                    }
+                }
+
+                let output = std::process::Command::new("openvpn")
+                    .args(&args)
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
-                    .output(),
-            };
+                    .output();
 
-            match output {
-                Ok(out) if out.status.success() => {
-                    let _ = cmd_tx.send(Message::ConnectResult {
-                        profile: name,
-                        success: true,
-                        error: None,
-                    });
+                // --daemon: parent forks and exits. A non-zero exit here means
+                // the config failed basic validation before the fork.
+                match output {
+                    Ok(out) if !out.status.success() => {
+                        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: false,
+                            error: Some(format!("OpenVPN: {}", stderr.trim())),
+                        });
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name,
+                            success: false,
+                            error: Some(format!("Failed to start OpenVPN: {e}")),
+                        });
+                        return;
+                    }
+                    Ok(_) => {} // Fork succeeded, daemon is running
                 }
-                Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-                    let _ = cmd_tx.send(Message::ConnectResult {
-                        profile: name,
-                        success: false,
-                        error: Some(format!("{protocol}: {stderr}")),
-                    });
-                }
-                Err(e) => {
-                    let _ = cmd_tx.send(Message::ConnectResult {
-                        profile: name,
-                        success: false,
-                        error: Some(format!("Failed to execute {protocol}: {e}")),
-                    });
+
+                // Poll the log file for definitive success/failure from the daemon.
+                let timeout = std::time::Duration::from_secs(constants::OVPN_CONNECT_TIMEOUT_SECS);
+                let poll_interval = std::time::Duration::from_millis(constants::OVPN_LOG_POLL_MS);
+                let start = std::time::Instant::now();
+
+                loop {
+                    std::thread::sleep(poll_interval);
+
+                    // Check if the daemon died (pid file gone or process not running)
+                    if start.elapsed() > std::time::Duration::from_secs(2) {
+                        if let Ok(content) = std::fs::read_to_string(&pid_path) {
+                            if let Ok(pid) = content.trim().parse::<u32>() {
+                                // Check if process is still alive
+                                let alive = std::process::Command::new("kill")
+                                    .args(["-0", &pid.to_string()])
+                                    .output()
+                                    .is_ok_and(|o| o.status.success());
+                                if !alive {
+                                    // Daemon died -- read log for the reason
+                                    let log =
+                                        std::fs::read_to_string(&log_path).unwrap_or_default();
+                                    let last_lines: String = log
+                                        .lines()
+                                        .rev()
+                                        .take(5)
+                                        .collect::<Vec<_>>()
+                                        .into_iter()
+                                        .rev()
+                                        .collect::<Vec<_>>()
+                                        .join("\n");
+                                    let _ = cmd_tx.send(Message::ConnectResult {
+                                        profile: name,
+                                        success: false,
+                                        error: Some(format!(
+                                            "OpenVPN daemon exited:\n{last_lines}"
+                                        )),
+                                    });
+                                    return;
+                                }
+                            }
+                        } else if start.elapsed() > std::time::Duration::from_secs(3) {
+                            // No pid file after 3s -- daemon likely failed to start
+                            let log = std::fs::read_to_string(&log_path)
+                                .unwrap_or_else(|_| "No log output".to_string());
+                            let _ = cmd_tx.send(Message::ConnectResult {
+                                profile: name,
+                                success: false,
+                                error: Some(format!("OpenVPN: no PID file. Log:\n{log}")),
+                            });
+                            return;
+                        }
+                    }
+
+                    // Read the log file and check for markers
+                    if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+                        // Success marker
+                        if log_content.contains(constants::OVPN_LOG_SUCCESS) {
+                            let _ = cmd_tx.send(Message::ConnectResult {
+                                profile: name,
+                                success: true,
+                                error: None,
+                            });
+                            return;
+                        }
+
+                        // Error markers
+                        for pattern in constants::OVPN_LOG_ERRORS {
+                            if log_content.contains(pattern) {
+                                // Extract the line containing the error for context
+                                let error_line = log_content
+                                    .lines()
+                                    .find(|l| l.contains(pattern))
+                                    .unwrap_or(pattern);
+                                let _ = cmd_tx.send(Message::ConnectResult {
+                                    profile: name,
+                                    success: false,
+                                    error: Some(format!("OpenVPN: {error_line}")),
+                                });
+                                return;
+                            }
+                        }
+                    }
+
+                    // Timeout -- let the scanner take over
+                    if start.elapsed() >= timeout {
+                        let _ = cmd_tx.send(Message::ConnectResult {
+                            profile: name.clone(),
+                            success: true,
+                            error: None,
+                        });
+                        let _ = cmd_tx.send(Message::Log(format!(
+                            "WARN: OpenVPN log confirmation timed out for '{name}' \
+                             after {}s — scanner will confirm tunnel status",
+                            constants::OVPN_CONNECT_TIMEOUT_SECS
+                        )));
+                        return;
+                    }
                 }
             }
         });
@@ -1656,6 +2146,15 @@ impl App {
         self.session_start = None;
         self.sync_killswitch();
 
+        // Clean up OpenVPN runtime files if this was an OpenVPN profile
+        if self
+            .profiles
+            .iter()
+            .any(|p| p.name == profile_name && matches!(p.protocol, Protocol::OpenVPN))
+        {
+            crate::utils::cleanup_openvpn_run_files(profile_name);
+        }
+
         // Drain pending_connect: auto-connect to the queued profile
         if let Some(idx) = self.pending_connect.take() {
             if idx < self.profiles.len() {
@@ -1668,6 +2167,7 @@ impl App {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn disconnect(&mut self) {
         // Extract connection info from Connected or Connecting state
         let connection_info = match &self.connection_state {
@@ -1734,8 +2234,9 @@ impl App {
                         .stderr(std::process::Stdio::piped())
                         .output(),
                     Protocol::OpenVPN => {
-                        // Targeted kill if PID is known, else fallback to pkill
-                        if let Some(p) = pid {
+                        // Try PID file first (most reliable), then scanner PID, then pkill
+                        let target_pid = crate::utils::read_openvpn_pid(&profile_name).or(pid);
+                        if let Some(p) = target_pid {
                             std::process::Command::new("kill")
                                 .arg(p.to_string())
                                 .stdout(std::process::Stdio::piped())
@@ -1753,6 +2254,10 @@ impl App {
 
                 match output {
                     Ok(out) if out.status.success() => {
+                        // Clean up OpenVPN runtime files
+                        if matches!(protocol, Protocol::OpenVPN) {
+                            crate::utils::cleanup_openvpn_run_files(&profile_name);
+                        }
                         let _ = cmd_tx.send(Message::DisconnectResult {
                             profile: profile_name,
                             success: true,
@@ -1829,17 +2334,29 @@ impl App {
                             .output()
                     }
                     Protocol::OpenVPN => {
-                        // Escalate to SIGKILL (kill -9) via pkill
-                        std::process::Command::new("pkill")
-                            .args(["-9", "openvpn"])
-                            .stdout(std::process::Stdio::piped())
-                            .stderr(std::process::Stdio::piped())
-                            .output()
+                        // Escalate to SIGKILL: try PID file first, then pkill -9
+                        let target_pid = crate::utils::read_openvpn_pid(&name);
+                        if let Some(p) = target_pid {
+                            std::process::Command::new("kill")
+                                .args(["-9", &p.to_string()])
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .output()
+                        } else {
+                            std::process::Command::new("pkill")
+                                .args(["-9", "openvpn"])
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .output()
+                        }
                     }
                 };
 
                 match output {
                     Ok(out) if out.status.success() => {
+                        if matches!(protocol, Protocol::OpenVPN) {
+                            crate::utils::cleanup_openvpn_run_files(&name);
+                        }
                         let _ = cmd_tx.send(Message::DisconnectResult {
                             profile: name,
                             success: true,
@@ -2869,5 +3386,250 @@ mod tests {
             "QuickConnect from Disconnected should go to Connecting"
         );
         assert_eq!(app.pending_connect, None);
+    }
+
+    // ====================================================================
+    // Auth prompt tests
+    // ====================================================================
+
+    /// Helper: add `OpenVPN` profiles with a temp config file containing auth-user-pass.
+    fn add_openvpn_profiles_with_auth(app: &mut App, names: &[&str]) {
+        let dir = std::env::temp_dir().join("vortix_test_auth_profiles");
+        let _ = std::fs::create_dir_all(&dir);
+        for name in names {
+            let config_path = dir.join(format!("{name}.ovpn"));
+            std::fs::write(
+                &config_path,
+                "client\nremote example.com 1194\nauth-user-pass\ndev tun\nproto udp\n",
+            )
+            .unwrap();
+            app.profiles.push(VpnProfile {
+                name: (*name).to_string(),
+                protocol: Protocol::OpenVPN,
+                config_path,
+                location: "Test".to_string(),
+                last_used: None,
+            });
+        }
+    }
+
+    /// Helper: add `OpenVPN` profiles WITHOUT auth-user-pass.
+    fn add_openvpn_profiles_no_auth(app: &mut App, names: &[&str]) {
+        let dir = std::env::temp_dir().join("vortix_test_noauth_profiles");
+        let _ = std::fs::create_dir_all(&dir);
+        for name in names {
+            let config_path = dir.join(format!("{name}.ovpn"));
+            std::fs::write(
+                &config_path,
+                "client\nremote example.com 1194\ndev tun\nproto udp\n<ca>\n</ca>\n",
+            )
+            .unwrap();
+            app.profiles.push(VpnProfile {
+                name: (*name).to_string(),
+                protocol: Protocol::OpenVPN,
+                config_path,
+                location: "Test".to_string(),
+                last_used: None,
+            });
+        }
+    }
+
+    #[test]
+    fn test_auth_prompt_shown_for_openvpn_with_auth_user_pass() {
+        let mut app = test_app();
+        add_openvpn_profiles_with_auth(&mut app, &["auth-vpn"]);
+        app.is_root = true;
+
+        // Clean up any leftover saved creds
+        utils::delete_openvpn_auth_file("auth-vpn");
+
+        app.connect_profile(0);
+
+        // Should show auth prompt instead of connecting
+        assert!(
+            matches!(app.input_mode, InputMode::AuthPrompt { .. }),
+            "OpenVPN with auth-user-pass and no saved creds should show AuthPrompt"
+        );
+        assert!(
+            matches!(app.connection_state, ConnectionState::Disconnected),
+            "Should not start connecting before credentials are provided"
+        );
+    }
+
+    #[test]
+    fn test_auth_prompt_skipped_when_creds_saved() {
+        let mut app = test_app();
+        add_openvpn_profiles_with_auth(&mut app, &["saved-vpn"]);
+        app.is_root = true;
+
+        // Pre-save credentials
+        let _ = utils::write_openvpn_auth_file("saved-vpn", "user", "pass");
+
+        app.connect_profile(0);
+
+        // Should skip prompt and go to Connecting
+        assert!(
+            !matches!(app.input_mode, InputMode::AuthPrompt { .. }),
+            "Should not show AuthPrompt when creds are already saved"
+        );
+        assert!(
+            matches!(app.connection_state, ConnectionState::Connecting { .. }),
+            "Should proceed to Connecting with saved credentials"
+        );
+
+        // Clean up
+        utils::delete_openvpn_auth_file("saved-vpn");
+    }
+
+    #[test]
+    fn test_auth_prompt_skipped_for_wireguard() {
+        let mut app = test_app();
+        add_profiles(&mut app, &["wg-vpn"]);
+        app.is_root = true;
+
+        app.connect_profile(0);
+
+        // WireGuard should never show auth prompt
+        assert!(
+            !matches!(app.input_mode, InputMode::AuthPrompt { .. }),
+            "WireGuard profiles should never show AuthPrompt"
+        );
+    }
+
+    #[test]
+    fn test_auth_prompt_skipped_for_openvpn_without_auth_directive() {
+        let mut app = test_app();
+        add_openvpn_profiles_no_auth(&mut app, &["noauth-vpn"]);
+        app.is_root = true;
+
+        app.connect_profile(0);
+
+        // No auth-user-pass in config => no prompt
+        assert!(
+            !matches!(app.input_mode, InputMode::AuthPrompt { .. }),
+            "OpenVPN without auth-user-pass should not show AuthPrompt"
+        );
+        assert!(
+            matches!(app.connection_state, ConnectionState::Connecting { .. }),
+            "Should proceed to Connecting directly"
+        );
+    }
+
+    #[test]
+    fn test_auth_submit_triggers_connect() {
+        let mut app = test_app();
+        add_openvpn_profiles_with_auth(&mut app, &["submit-vpn"]);
+        app.is_root = true;
+
+        // Clean up any leftover
+        utils::delete_openvpn_auth_file("submit-vpn");
+
+        app.handle_message(Message::AuthSubmit {
+            idx: 0,
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+            save: true,
+            connect_after: true,
+        });
+
+        // Should be in Normal mode (overlay closed)
+        assert_eq!(app.input_mode, InputMode::Normal);
+        // Should be Connecting
+        assert!(
+            matches!(app.connection_state, ConnectionState::Connecting { .. }),
+            "AuthSubmit should trigger connect_profile"
+        );
+
+        // Verify credentials were saved
+        let creds = utils::read_openvpn_saved_auth("submit-vpn");
+        assert!(creds.is_some());
+        let (user, pass) = creds.unwrap();
+        assert_eq!(user, "testuser");
+        assert_eq!(pass, "testpass");
+
+        // Clean up
+        utils::delete_openvpn_auth_file("submit-vpn");
+    }
+
+    #[test]
+    fn test_auth_cancel_returns_to_normal() {
+        let mut app = test_app();
+        add_openvpn_profiles_with_auth(&mut app, &["cancel-vpn"]);
+        app.is_root = true;
+
+        // Clean up
+        utils::delete_openvpn_auth_file("cancel-vpn");
+
+        // Trigger auth prompt
+        app.connect_profile(0);
+        assert!(matches!(app.input_mode, InputMode::AuthPrompt { .. }));
+
+        // Cancel via CloseOverlay
+        app.handle_message(Message::CloseOverlay);
+        assert_eq!(app.input_mode, InputMode::Normal);
+        assert!(
+            matches!(app.connection_state, ConnectionState::Disconnected),
+            "Cancelling auth should keep Disconnected state"
+        );
+    }
+
+    #[test]
+    fn test_auth_field_switching() {
+        let mut app = test_app();
+        app.input_mode = InputMode::AuthPrompt {
+            profile_idx: 0,
+            profile_name: "test".to_string(),
+            username: String::new(),
+            username_cursor: 0,
+            password: String::new(),
+            password_cursor: 0,
+            focused_field: AuthField::Username,
+            save_credentials: true,
+            connect_after: true,
+        };
+
+        // Tab from Username -> Password
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        if let InputMode::AuthPrompt { focused_field, .. } = &app.input_mode {
+            assert_eq!(*focused_field, AuthField::Password);
+        } else {
+            panic!("Expected AuthPrompt");
+        }
+
+        // Tab from Password -> SaveCheckbox
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        if let InputMode::AuthPrompt { focused_field, .. } = &app.input_mode {
+            assert_eq!(*focused_field, AuthField::SaveCheckbox);
+        } else {
+            panic!("Expected AuthPrompt");
+        }
+
+        // Tab from SaveCheckbox -> Username (wraps around)
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        if let InputMode::AuthPrompt { focused_field, .. } = &app.input_mode {
+            assert_eq!(*focused_field, AuthField::Username);
+        } else {
+            panic!("Expected AuthPrompt");
+        }
+    }
+
+    #[test]
+    fn test_auth_delete_profile_cleans_auth_file() {
+        let mut app = test_app();
+        add_openvpn_profiles_with_auth(&mut app, &["del-vpn"]);
+        app.profile_list_state.select(Some(0));
+
+        // Pre-save credentials
+        let auth_path = utils::write_openvpn_auth_file("del-vpn", "user", "pass").unwrap();
+        assert!(auth_path.exists());
+
+        // Delete the profile
+        app.confirm_delete(0);
+
+        // Auth file should be cleaned up
+        assert!(
+            !auth_path.exists(),
+            "Auth file should be deleted when profile is deleted"
+        );
     }
 }

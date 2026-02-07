@@ -113,6 +113,42 @@ pub const KILLSWITCH_EMERGENCY_MSG: &str = "You may need to run: sudo pfctl -F a
 pub const KILLSWITCH_EMERGENCY_MSG: &str =
     "You may need to run: sudo iptables -F VORTIX_KILLSWITCH && sudo iptables -X VORTIX_KILLSWITCH (or: sudo nft delete table inet vortix_killswitch)";
 
+// === OpenVPN Runtime Configuration ===
+
+/// Subdirectory under the Vortix config dir for `OpenVPN` runtime files (pid, log).
+pub const OPENVPN_RUN_DIR: &str = "run";
+/// `OpenVPN` log line indicating successful tunnel establishment.
+pub const OVPN_LOG_SUCCESS: &str = "Initialization Sequence Completed";
+/// `OpenVPN` log patterns indicating definitive failure.
+pub const OVPN_LOG_ERRORS: &[&str] = &[
+    "AUTH_FAILED",
+    "TLS Error",
+    "TLS handshake failed",
+    "FATAL",
+    "Cannot open TUN/TAP",
+    "ERROR:",
+    "Exiting due to fatal error",
+];
+/// Maximum seconds to wait for `OpenVPN` log confirmation before falling back to scanner.
+pub const OVPN_CONNECT_TIMEOUT_SECS: u64 = 20;
+/// Polling interval for `OpenVPN` log file (milliseconds).
+pub const OVPN_LOG_POLL_MS: u64 = 500;
+/// Subdirectory under the Vortix config dir for `OpenVPN` saved credentials.
+pub const OPENVPN_AUTH_DIR: &str = "auth";
+/// `OpenVPN` config directive that triggers interactive auth prompts.
+pub const OVPN_AUTH_USER_PASS: &str = "auth-user-pass";
+
+// === Auth UI Labels ===
+
+/// Title for the authentication overlay (connect flow).
+pub const TITLE_AUTH_PROMPT: &str = " VPN Authentication ";
+/// Title for the authentication overlay (manage/edit flow).
+pub const TITLE_AUTH_MANAGE: &str = " Edit Auth Credentials ";
+/// Footer keybindings for the auth overlay (connect flow).
+pub const TITLE_AUTH_FOOTER: &str = " [Tab] Switch  [Enter] Connect  [Esc] Cancel ";
+/// Footer keybindings for the auth overlay (manage/edit flow).
+pub const TITLE_AUTH_MANAGE_FOOTER: &str = " [Tab] Switch  [Enter] Save  [Esc] Cancel ";
+
 // === Import & Download Configuration ===
 
 /// Maximum config file size (1 MB). Anything larger is almost certainly not a VPN config.
