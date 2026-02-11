@@ -87,6 +87,8 @@ sudo pacman -S curl wireguard-tools openvpn iptables iproute2
 cargo install vortix
 ```
 
+> **Linux note:** `cargo install` places the binary in `~/.cargo/bin/`, which is not in `sudo`'s default PATH. Use `sudo ~/.cargo/bin/vortix` or create a symlink: `sudo ln -s ~/.cargo/bin/vortix /usr/local/bin/vortix`
+
 **Arch Linux ([extra repo](https://archlinux.org/packages/extra/x86_64/vortix/)):**
 ```bash
 pacman -S vortix
@@ -281,6 +283,18 @@ If config files are owned by root, fix ownership:
 ```bash
 sudo chown -R $(whoami) ~/.config/vortix/
 ```
+
+**`sudo: vortix: command not found` (Linux)**
+
+On Linux, `sudo` resets PATH to a restricted set (`secure_path` in `/etc/sudoers`) that doesn't include `~/.cargo/bin/`. This happens when you install via `cargo install`. Fix with:
+
+```bash
+sudo ln -s ~/.cargo/bin/vortix /usr/local/bin/vortix
+```
+
+Or run with the full path: `sudo ~/.cargo/bin/vortix`
+
+This doesn't affect macOS (which preserves user PATH under sudo) or Arch Linux (`pacman` installs to `/usr/bin/`).
 
 **Custom config directory**
 
