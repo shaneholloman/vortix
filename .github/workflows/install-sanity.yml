@@ -174,8 +174,9 @@ jobs:
       - name: Verify --help
         run: vortix --help
 
-      - name: Verify binary is in system PATH (/usr/bin)
+      - name: Verify binary is in system PATH
         run: |
           LOCATION=$(command -v vortix)
           echo "Installed at: $LOCATION"
-          echo "$LOCATION" | grep -q "/usr/bin/vortix"
+          # pacman may install to /usr/bin or /usr/sbin
+          echo "$LOCATION" | grep -qE "^/usr/(s?bin)/vortix$"
