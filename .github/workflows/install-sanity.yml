@@ -1,0 +1,117 @@
+name: Installation Sanity
+
+on:
+  schedule:
+    # Daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cargo-install:
+    name: cargo install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install from crates.io
+        run: cargo install vortix
+
+      - name: Get expected version from crates.io
+        id: expected
+        run: |
+          VERSION=$(curl -s https://crates.io/api/v1/crates/vortix | python3 -c "import sys,json; print(json.load(sys.stdin)['crate']['max_version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(vortix --version)
+          echo "Got: $OUTPUT"
+          echo "$OUTPUT" | grep -q "${{ steps.expected.outputs.version }}"
+
+      - name: Verify info subcommand
+        run: vortix info
+
+  shell-installer:
+    name: Shell installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Run shell installer
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/vortix/releases/latest/download/vortix-installer.sh | sh
+
+      - name: Add cargo bin to PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Get expected version from latest release
+        id: expected
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/Harry-kp/vortix/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(vortix --version)
+          echo "Got: $OUTPUT"
+          echo "$OUTPUT" | grep -q "${{ steps.expected.outputs.version }}"
+
+      - name: Verify info subcommand
+        run: vortix info
+
+  static-binary:
+    name: Static binary (Linux musl)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get latest release tag
+        id: release
+        run: |
+          TAG=$(curl -s https://api.github.com/repos/Harry-kp/vortix/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download and extract musl binary
+        run: |
+          curl -LO "https://github.com/Harry-kp/vortix/releases/download/${{ steps.release.outputs.tag }}/vortix-x86_64-unknown-linux-musl.tar.xz"
+          tar -xf vortix-x86_64-unknown-linux-musl.tar.xz
+          chmod +x vortix-x86_64-unknown-linux-musl/vortix
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(./vortix-x86_64-unknown-linux-musl/vortix --version)
+          echo "Got: $OUTPUT"
+          echo "$OUTPUT" | grep -q "${{ steps.release.outputs.version }}"
+
+      - name: Verify info subcommand
+        run: ./vortix-x86_64-unknown-linux-musl/vortix info
+
+  arch-linux:
+    name: Arch Linux (pacman)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install vortix from extra repo
+        run: |
+          pacman -Syu --noconfirm vortix
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(vortix --version)
+          echo "Got: $OUTPUT"
+          # Log version but don't assert -- Arch package may lag behind
+          echo "Arch package version: $OUTPUT"
+
+      - name: Verify info subcommand
+        run: vortix info
