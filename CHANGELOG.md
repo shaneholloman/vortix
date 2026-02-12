@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-02-12
+
+### Documentation
+
+- Add sudo PATH troubleshooting for cargo install on Linux
+- Restructure README for clarity and fix misleading info
+- Move sudo PATH fix to prominent section after installation
+
+### Features
+
+- Add Homebrew and npm package manager support
+
+
+
 ## [0.1.3] - 2026-02-11
 
 ### Bug Fixes
