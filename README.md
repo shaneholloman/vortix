@@ -326,6 +326,10 @@ If config files are owned by root, fix ownership:
 sudo chown -R $(whoami) ~/.config/vortix/
 ```
 
+## Roadmap
+
+See the [project board](https://github.com/users/Harry-kp/projects/6) for what's being explored. Have an idea? [Join the discussion](https://github.com/Harry-kp/vortix/discussions/34).
+
 ## Development
 
 ```bash
