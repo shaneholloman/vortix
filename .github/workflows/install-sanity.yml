@@ -180,3 +180,74 @@ jobs:
           echo "Installed at: $LOCATION"
           # pacman may install to /usr/bin or /usr/sbin
           echo "$LOCATION" | grep -qE "^/usr/(s?bin)/vortix$"
+
+  homebrew:
+    name: Homebrew (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Homebrew (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+
+      - name: Install vortix from tap
+        run: brew install Harry-kp/tap/vortix
+
+      - name: Get expected version from latest release
+        id: expected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(gh release view --repo Harry-kp/vortix --json tagName -q '.tagName' | sed 's/^v//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(vortix --version)
+          echo "Got: $OUTPUT"
+          echo "$OUTPUT" | grep -q "${{ steps.expected.outputs.version }}"
+
+      - name: Verify --help
+        run: vortix --help
+
+      - name: Verify binary is in Homebrew PATH
+        run: |
+          LOCATION=$(command -v vortix)
+          echo "Installed at: $LOCATION"
+
+  npm-install:
+    name: npm install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install vortix from npm
+        run: npm install -g @harry-kp/vortix
+
+      - name: Get expected version from latest release
+        id: expected
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(gh release view --repo Harry-kp/vortix --json tagName -q '.tagName' | sed 's/^v//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify --version
+        run: |
+          OUTPUT=$(vortix --version)
+          echo "Got: $OUTPUT"
+          echo "$OUTPUT" | grep -q "${{ steps.expected.outputs.version }}"
+
+      - name: Verify --help
+        run: vortix --help

@@ -8,6 +8,8 @@
 [![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](https://github.com/Harry-kp/vortix)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)](https://www.rust-lang.org/)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/Harry-kp?logo=github)](https://github.com/sponsors/Harry-kp)
+[![Homebrew](https://img.shields.io/badge/Homebrew-tap-orange?logo=homebrew)](https://github.com/Harry-kp/homebrew-tap)
+[![npm](https://img.shields.io/npm/v/@harry-kp/vortix?logo=npm)](https://www.npmjs.com/package/@harry-kp/vortix)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub Stars](https://img.shields.io/github/stars/Harry-kp/vortix?style=social)](https://github.com/Harry-kp/vortix)
 
@@ -85,7 +87,19 @@ sudo pacman -S curl wireguard-tools openvpn iptables iproute2
 
 ## Installation
 
-**From crates.io (Recommended):**
+**Homebrew (macOS/Linux):**
+```bash
+brew install Harry-kp/tap/vortix
+```
+
+**npm/npx:**
+```bash
+npm install -g @harry-kp/vortix
+# or run directly without installing:
+npx @harry-kp/vortix
+```
+
+**From crates.io:**
 ```bash
 cargo install vortix
 ```
@@ -127,6 +141,8 @@ After this, `sudo vortix` works as expected.
 - Shell installer (`curl | sh`) — yes
 - From source (`cargo install --path .`) — yes
 - `pacman -S vortix` (Arch) — **no**, installs to `/usr/bin/`
+- `brew install` (Homebrew) — **no**, installs to Homebrew prefix
+- `npm install -g` (npm) — **no**, installs to npm global bin
 - macOS — **no**, sudo preserves user PATH
 
 ## Usage
