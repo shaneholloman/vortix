@@ -1,17 +1,19 @@
 # Vortix
 
-[![Crates.io](https://img.shields.io/crates/v/vortix.svg)](https://crates.io/crates/vortix)
-[![Downloads](https://img.shields.io/crates/d/vortix.svg)](https://crates.io/crates/vortix)
 [![CI](https://github.com/Harry-kp/vortix/actions/workflows/ci.yml/badge.svg)](https://github.com/Harry-kp/vortix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Crates.io](https://img.shields.io/crates/v/vortix.svg)](https://crates.io/crates/vortix)
+[![Crates.io Downloads](https://img.shields.io/crates/d/vortix.svg)](https://crates.io/crates/vortix)
+[![npm](https://img.shields.io/npm/v/@harry-kp/vortix?logo=npm)](https://www.npmjs.com/package/@harry-kp/vortix)
+[![npm Downloads](https://img.shields.io/npm/dm/@harry-kp/vortix?label=npm%20downloads)](https://www.npmjs.com/package/@harry-kp/vortix)
+[![Homebrew](https://img.shields.io/badge/Homebrew-tap-orange?logo=homebrew)](https://github.com/Harry-kp/homebrew-tap)
+[![Nix Flake](https://img.shields.io/badge/Nix-flake-blue?logo=nixos)](https://github.com/Harry-kp/vortix#installation)
 [![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)](https://github.com/Harry-kp/vortix)
 [![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](https://github.com/Harry-kp/vortix)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange?logo=rust)](https://www.rust-lang.org/)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/Harry-kp?logo=github)](https://github.com/sponsors/Harry-kp)
-[![Homebrew](https://img.shields.io/badge/Homebrew-tap-orange?logo=homebrew)](https://github.com/Harry-kp/homebrew-tap)
-[![npm](https://img.shields.io/npm/v/@harry-kp/vortix?logo=npm)](https://www.npmjs.com/package/@harry-kp/vortix)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![GitHub Stars](https://img.shields.io/github/stars/Harry-kp/vortix?style=social)](https://github.com/Harry-kp/vortix)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/Harry-kp?logo=github)](https://github.com/sponsors/Harry-kp)
 
 Terminal UI for WireGuard and OpenVPN with real-time telemetry and leak guarding.
 
