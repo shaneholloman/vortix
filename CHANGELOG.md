@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-02-16
+
+### Bug Fixes
+
+- Address PR review feedback for bug report feature
+
+### Documentation
+
+- Add roadmap and feature voting links to README
+- Add vortix report and Nix installation to README
+- Rearrange badges, add Nix flake and npm downloads badges
+
+### Features
+
+- Add `vortix report` bug report command
+
+### Miscellaneous
+
+- **deps:** Bump the rust-minor group with 2 updates ([#40](https://github.com/Harry-kp/vortix/pull/40))
+
+
+
 ## [0.1.4] - 2026-02-12
 
 ### Documentation
