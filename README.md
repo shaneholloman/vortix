@@ -355,6 +355,10 @@ nix develop
 
 ## Featured In
 
+- [awesome-rust](https://github.com/rust-unofficial/awesome-rust) — A curated list of Rust code and resources
+- [awesome-ratatui](https://github.com/ratatui/awesome-ratatui) — A curated list of Ratatui apps and tools
+- [awesome-tuis](https://github.com/rothgar/awesome-tuis) — A list of the best TUI programs
+- [Arch Linux [extra]](https://archlinux.org/packages/extra/x86_64/vortix/) — Official Arch Linux package repository
 - [Terminal Trove](https://terminaltrove.com/vortix/) — The $HOME of all things in the terminal
 
 ## Star History
