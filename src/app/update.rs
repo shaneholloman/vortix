@@ -170,6 +170,25 @@ impl App {
                 connect_after,
             } => self.handle_auth_submit(idx, username, password, save, connect_after),
 
+            Message::CycleSortOrder => {
+                let selected_name = self
+                    .profile_list_state
+                    .selected()
+                    .and_then(|i| self.profiles.get(i))
+                    .map(|p| p.name.clone());
+                self.sort_order = self.sort_order.next();
+                self.sort_profiles();
+                if let Some(name) = selected_name {
+                    if let Some(new_idx) = self.profiles.iter().position(|p| p.name == name) {
+                        self.profile_list_state.select(Some(new_idx));
+                    }
+                }
+                self.show_toast(
+                    format!("Sorted: {}", self.sort_order.label()),
+                    ToastType::Info,
+                );
+            }
+
             Message::ToggleKillSwitch => self.handle_toggle_killswitch(),
 
             // System

@@ -683,10 +683,11 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
         Style::default().fg(theme::BORDER_DEFAULT)
     };
 
+    let sort_label = app.sort_order.label();
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(" Profiles ");
+        .title(format!(" Profiles [{sort_label}] "));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1796,6 +1797,13 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
             ),
         ]));
 
+        let latency_color = if app.latency_ms < 50 {
+            theme::NORD_GREEN
+        } else if app.latency_ms < 150 {
+            theme::NORD_YELLOW
+        } else {
+            theme::NORD_RED
+        };
         text.push(Line::from(vec![
             Span::styled(
                 "  ├─ Ping (Latency)   : ",
@@ -1803,10 +1811,17 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
             ),
             Span::styled(
                 format!("{}ms", app.latency_ms),
-                Style::default().fg(theme::TEXT_PRIMARY),
+                Style::default().fg(latency_color),
             ),
         ]));
 
+        let jitter_color = if app.jitter_ms < 5 {
+            theme::NORD_GREEN
+        } else if app.jitter_ms < 15 {
+            theme::NORD_YELLOW
+        } else {
+            theme::NORD_RED
+        };
         text.push(Line::from(vec![
             Span::styled(
                 "  ├─ Stability (Jitter): ",
@@ -1814,7 +1829,7 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
             ),
             Span::styled(
                 format!("±{}ms", app.jitter_ms),
-                Style::default().fg(theme::TEXT_PRIMARY),
+                Style::default().fg(jitter_color),
             ),
         ]));
 

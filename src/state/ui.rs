@@ -118,6 +118,44 @@ pub enum InputMode {
     },
 }
 
+/// Profile list sort ordering.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ProfileSortOrder {
+    /// Alphabetical A → Z (default).
+    #[default]
+    NameAsc,
+    /// Alphabetical Z → A.
+    NameDesc,
+    /// Most recently used first.
+    LastUsed,
+    /// Group by protocol (`WireGuard` first, then `OpenVPN`).
+    Protocol,
+}
+
+impl ProfileSortOrder {
+    /// Cycle to the next sort order.
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::NameAsc => Self::NameDesc,
+            Self::NameDesc => Self::LastUsed,
+            Self::LastUsed => Self::Protocol,
+            Self::Protocol => Self::NameAsc,
+        }
+    }
+
+    /// Short label for display in the sidebar title.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NameAsc => "A→Z",
+            Self::NameDesc => "Z→A",
+            Self::LastUsed => "Recent",
+            Self::Protocol => "Proto",
+        }
+    }
+}
+
 /// Types of toast notifications for color coding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ToastType {

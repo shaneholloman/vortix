@@ -40,6 +40,7 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
             ("c / Enter", "Connect / disconnect"),
             ("R", "Rename profile"),
             ("v", "View config"),
+            ("s", "Cycle sort order"),
             ("a", "Manage auth (OpenVPN)"),
             ("A", "Clear saved auth"),
             ("Del", "Delete profile"),

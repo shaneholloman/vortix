@@ -194,9 +194,37 @@ impl App {
         let _ = utils::save_profile_metadata(&metadata);
     }
 
-    /// Sort profiles alphabetically by name, updating quick slots
+    /// Sort profiles according to the current `sort_order`.
     pub(crate) fn sort_profiles(&mut self) {
-        self.profiles.sort_by(|a, b| a.name.cmp(&b.name));
+        use crate::state::ProfileSortOrder;
+        match self.sort_order {
+            ProfileSortOrder::NameAsc => {
+                self.profiles.sort_by(|a, b| a.name.cmp(&b.name));
+            }
+            ProfileSortOrder::NameDesc => {
+                self.profiles.sort_by(|a, b| b.name.cmp(&a.name));
+            }
+            ProfileSortOrder::LastUsed => {
+                self.profiles.sort_by(|a, b| {
+                    b.last_used
+                        .unwrap_or(std::time::UNIX_EPOCH)
+                        .cmp(&a.last_used.unwrap_or(std::time::UNIX_EPOCH))
+                });
+            }
+            ProfileSortOrder::Protocol => {
+                fn proto_rank(p: crate::state::Protocol) -> u8 {
+                    match p {
+                        crate::state::Protocol::WireGuard => 0,
+                        crate::state::Protocol::OpenVPN => 1,
+                    }
+                }
+                self.profiles.sort_by(|a, b| {
+                    proto_rank(a.protocol)
+                        .cmp(&proto_rank(b.protocol))
+                        .then_with(|| a.name.cmp(&b.name))
+                });
+            }
+        }
     }
 
     /// Import a profile from a file path or bulk import from directory
