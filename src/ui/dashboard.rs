@@ -1832,16 +1832,16 @@ fn render_rename_overlay(frame: &mut Frame, name: &str, cursor: usize) {
     let inner = block.inner(overlay);
     frame.render_widget(block, overlay);
 
-    let pos = cursor.min(name.len());
-    let (before, after) = name.split_at(pos);
+    let before: String = name.chars().take(cursor).collect();
+    let after: String = name.chars().skip(cursor).collect();
     let mut spans = vec![
         Span::styled("> ", Style::default().fg(theme::ACCENT_PRIMARY)),
-        Span::styled(before.to_string(), Style::default().fg(theme::TEXT_PRIMARY)),
+        Span::styled(before, Style::default().fg(theme::TEXT_PRIMARY)),
         Span::styled("▌", Style::default().fg(theme::ACCENT_PRIMARY)),
     ];
     if !after.is_empty() {
         spans.push(Span::styled(
-            after.to_string(),
+            after,
             Style::default().fg(theme::TEXT_PRIMARY),
         ));
     }
@@ -1863,15 +1863,7 @@ fn render_search_bar(frame: &mut Frame, app: &App, query: &str, cursor: usize, t
 
     frame.render_widget(Clear, bar_area);
 
-    let match_count = if query.is_empty() {
-        total
-    } else {
-        let lower = query.to_lowercase();
-        app.profiles
-            .iter()
-            .filter(|p| p.name.to_lowercase().contains(&lower))
-            .count()
-    };
+    let match_count = app.search_match_count;
 
     let count_text = if query.is_empty() {
         format!("{total} profiles")
@@ -1898,15 +1890,16 @@ fn render_search_bar(frame: &mut Frame, app: &App, query: &str, cursor: usize, t
     let inner = block.inner(bar_area);
     frame.render_widget(block, bar_area);
 
-    let (before, after) = query.split_at(cursor.min(query.len()));
+    let before: String = query.chars().take(cursor).collect();
+    let after: String = query.chars().skip(cursor).collect();
     let mut spans = vec![
         Span::styled("/", Style::default().fg(theme::ACCENT_PRIMARY)),
-        Span::styled(before.to_string(), Style::default().fg(theme::TEXT_PRIMARY)),
+        Span::styled(before, Style::default().fg(theme::TEXT_PRIMARY)),
         Span::styled("▌", Style::default().fg(theme::ACCENT_PRIMARY)),
     ];
     if !after.is_empty() {
         spans.push(Span::styled(
-            after.to_string(),
+            after,
             Style::default().fg(theme::TEXT_PRIMARY),
         ));
     }

@@ -695,16 +695,21 @@ impl App {
 
     pub(crate) fn apply_search_filter(&mut self, query: &str) {
         if query.is_empty() {
+            self.search_match_count = self.profiles.len();
             self.profile_list_state.select(Some(0));
             return;
         }
         let lower = query.to_lowercase();
-        if let Some(idx) = self
+        let matches: Vec<usize> = self
             .profiles
             .iter()
-            .position(|p| p.name.to_lowercase().contains(&lower))
-        {
-            self.profile_list_state.select(Some(idx));
+            .enumerate()
+            .filter(|(_, p)| p.name.to_lowercase().contains(&lower))
+            .map(|(i, _)| i)
+            .collect();
+        self.search_match_count = matches.len();
+        if let Some(&first) = matches.first() {
+            self.profile_list_state.select(Some(first));
         }
     }
 }
