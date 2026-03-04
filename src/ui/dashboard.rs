@@ -594,13 +594,13 @@ fn get_connection_info(
 ) {
     match &app.connection_state {
         ConnectionState::Disconnected => {
-            ("○ DISCONNECTED", theme::ERROR, "None", "None", "-", None)
+            ("✗ DISCONNECTED", theme::ERROR, "None", "None", "-", None)
         }
         ConnectionState::Connecting { profile, .. } => {
-            ("◐ CONNECTING", theme::WARNING, profile, "...", "...", None)
+            ("⟳ CONNECTING", theme::WARNING, profile, "...", "...", None)
         }
         ConnectionState::Disconnecting { profile, .. } => (
-            "◑ DISCONNECTING",
+            "⏻ DISCONNECTING",
             theme::WARNING,
             profile,
             "...",
@@ -613,7 +613,7 @@ fn get_connection_info(
             details,
             ..
         } => (
-            "● CONNECTED",
+            "✓ CONNECTED",
             theme::SUCCESS,
             profile,
             &app.location,
@@ -1470,11 +1470,17 @@ fn render_activity_log(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(theme::BORDER_DEFAULT)
     };
 
-    // Dynamic title based on auto-scroll state
+    let filter_label = match app.log_level_filter {
+        Some(logger::LogLevel::Error) => " Err",
+        Some(logger::LogLevel::Warning) => " Warn+",
+        Some(logger::LogLevel::Info) => " Info+",
+        None | Some(_) => "",
+    };
+
     let title = if app.logs_auto_scroll {
-        " Event Log [Live] "
+        format!(" Event Log [Live{filter_label}] ")
     } else {
-        " Event Log [Paused - G to resume] "
+        format!(" Event Log [Paused{filter_label}] ")
     };
 
     let block = Block::default()
@@ -1485,8 +1491,15 @@ fn render_activity_log(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Get logs from centralized logger
-    let all_logs = logger::get_logs();
+    let raw_logs = logger::get_logs();
+    let all_logs: Vec<_> = if let Some(min_level) = app.log_level_filter {
+        raw_logs
+            .into_iter()
+            .filter(|e| e.level >= min_level)
+            .collect()
+    } else {
+        raw_logs
+    };
 
     if all_logs.is_empty() {
         frame.render_widget(
@@ -1503,7 +1516,7 @@ fn render_activity_log(frame: &mut Frame, app: &App, area: Rect) {
     let start_idx = if app.logs_auto_scroll {
         all_logs.len().saturating_sub(visible_lines)
     } else {
-        app.logs_scroll as usize
+        (app.logs_scroll as usize).min(all_logs.len().saturating_sub(1))
     };
 
     let end_idx = (start_idx + visible_lines).min(all_logs.len());

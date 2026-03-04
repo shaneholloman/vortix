@@ -94,6 +94,7 @@ pub struct App {
     /// Scroll position for logs panel (logs stored in logger module)
     pub logs_scroll: u16,
     pub logs_auto_scroll: bool,
+    pub log_level_filter: Option<crate::logger::LogLevel>,
 
     // === UI State (Panel-based) ===
     pub focused_panel: FocusedPanel,
@@ -192,6 +193,7 @@ impl App {
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
+            log_level_filter: None,
 
             // Panel-based UI state
             focused_panel: FocusedPanel::Sidebar,
@@ -374,6 +376,7 @@ impl App {
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
+            log_level_filter: None,
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,
             input_mode: InputMode::Normal,

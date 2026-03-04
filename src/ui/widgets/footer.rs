@@ -34,8 +34,30 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut hints = Vec::new();
 
-    if !app.profiles.is_empty() {
-        hints.push(("1-9", "Quick Connect"));
+    match &app.focused_panel {
+        crate::app::FocusedPanel::Sidebar => {
+            hints.extend_from_slice(&[
+                ("j/k", "Navigate"),
+                ("c", "Connect"),
+                ("v", "View Config"),
+                ("R", "Rename"),
+                ("i", "Import"),
+                ("DEL", "Delete"),
+            ]);
+        }
+        crate::app::FocusedPanel::Logs => {
+            hints.extend_from_slice(&[
+                ("j/k", "Scroll"),
+                ("g/G", "Top/End"),
+                ("f", "Filter"),
+                ("L", "Clear"),
+            ]);
+        }
+        crate::app::FocusedPanel::Chart
+        | crate::app::FocusedPanel::Security
+        | crate::app::FocusedPanel::ConnectionDetails => {
+            hints.push(("z", "Zoom"));
+        }
     }
 
     let disconnect_hint = match &app.connection_state {
@@ -46,16 +68,17 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
             if app.last_connected_profile.is_some() {
                 ("r", "Reconnect")
             } else {
-                ("c", "Connect")
+                ("", "")
             }
         }
     };
+    if !disconnect_hint.0.is_empty() {
+        hints.push(disconnect_hint);
+    }
 
     hints.extend_from_slice(&[
-        ("i", "Import"),
-        disconnect_hint,
         ("Tab", "Panel"),
-        ("K", "Kill Switch"),
+        ("K", "KillSw"),
         ("?", "Help"),
         ("q", "Quit"),
     ]);

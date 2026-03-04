@@ -20,6 +20,7 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
             ("K", "Cycle kill switch mode"),
             ("y", "Copy VPN IP to clipboard"),
             ("Tab/S-Tab", "Next / Previous panel"),
+            ("F1-F5", "Jump to panel (Prof/Det/Chart/Sec/Log)"),
             ("z", "Zoom focused panel"),
             ("x", "Action menu"),
             ("b", "Bulk action menu"),
@@ -49,6 +50,7 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
         &[
             ("j / ↓", "Scroll down"),
             ("k / ↑", "Scroll up"),
+            ("f", "Cycle log level filter"),
             ("L", "Clear logs"),
         ],
     ),
