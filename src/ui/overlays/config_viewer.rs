@@ -9,7 +9,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
-use std::fs;
 use std::path::PathBuf;
 
 /// Render config file viewer overlay
@@ -19,28 +18,19 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Clear the background
     frame.render_widget(Clear, area);
 
-    // Get the current profile's config path
-    let (config_content, profile_name, config_path): (String, String, PathBuf) =
+    let (config_content, profile_name, config_path): (&str, String, PathBuf) =
         if let Some(idx) = app.profile_list_state.selected() {
             if let Some(profile) = app.profiles.get(idx) {
-                let content = match fs::read_to_string(&profile.config_path) {
-                    Ok(c) => c,
-                    Err(e) => format!("Error reading config: {e}"),
-                };
+                let content = app
+                    .cached_config_content
+                    .as_deref()
+                    .unwrap_or("No config loaded");
                 (content, profile.name.clone(), profile.config_path.clone())
             } else {
-                (
-                    "No profile selected".to_string(),
-                    String::new(),
-                    PathBuf::new(),
-                )
+                ("No profile selected", String::new(), PathBuf::new())
             }
         } else {
-            (
-                "No profile selected".to_string(),
-                String::new(),
-                PathBuf::new(),
-            )
+            ("No profile selected", String::new(), PathBuf::new())
         };
 
     let title = if profile_name.is_empty() {

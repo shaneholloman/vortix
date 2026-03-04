@@ -49,6 +49,8 @@ fn test_app() -> App {
         show_bulk_menu: false,
         action_menu_state: ratatui::widgets::ListState::default(),
         config_scroll: 0,
+        cached_config_content: None,
+        search_match_count: 0,
         profile_list_state: ratatui::widgets::TableState::default(),
         panel_areas: std::collections::HashMap::new(),
         toast: None,
@@ -1139,4 +1141,60 @@ fn test_search_filter_no_match_keeps_selection() {
         Some(0),
         "No match should not change selection"
     );
+}
+
+#[test]
+fn test_open_config_caches_content_and_close_clears() {
+    let mut app = test_app();
+
+    let tmp = std::env::temp_dir().join("vortix_test_config.conf");
+    std::fs::write(&tmp, "[Interface]\nAddress = 10.0.0.1/24").unwrap();
+    app.profiles.push(VpnProfile {
+        name: "test-vpn".to_string(),
+        protocol: Protocol::WireGuard,
+        config_path: tmp.clone(),
+        location: "Test".to_string(),
+        last_used: None,
+    });
+    app.profile_list_state.select(Some(0));
+
+    app.handle_message(Message::OpenConfig);
+    assert!(app.show_config, "Config viewer should be open");
+    assert!(
+        app.cached_config_content.is_some(),
+        "Config content should be cached"
+    );
+    assert!(app
+        .cached_config_content
+        .as_ref()
+        .unwrap()
+        .contains("[Interface]"));
+
+    app.handle_message(Message::CloseOverlay);
+    assert!(!app.show_config, "Config viewer should be closed");
+    assert!(
+        app.cached_config_content.is_none(),
+        "Cached content should be cleared on close"
+    );
+
+    let _ = std::fs::remove_file(tmp);
+}
+
+#[test]
+fn test_search_match_count_updated() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["amsterdam", "ankara", "berlin"]);
+    app.profile_list_state.select(Some(0));
+
+    app.apply_search_filter("an");
+    assert_eq!(app.search_match_count, 1, "Should match ankara");
+
+    app.apply_search_filter("a");
+    assert_eq!(
+        app.search_match_count, 2,
+        "Should match amsterdam and ankara"
+    );
+
+    app.apply_search_filter("");
+    assert_eq!(app.search_match_count, 3, "Empty query should match all");
 }
