@@ -497,8 +497,21 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
         ConnectionState::Connected { .. } => {
             // Connected - show VPN IP, uptime, and quality
             let elapsed = since.map_or(0, |s| s.elapsed().as_secs());
-            let uptime = if elapsed >= 3600 {
-                format!("▲{:02}:{:02}", elapsed / 3600, (elapsed % 3600) / 60)
+            let uptime = if elapsed >= 86400 {
+                format!(
+                    "▲{}d {:02}:{:02}:{:02}",
+                    elapsed / 86400,
+                    (elapsed % 86400) / 3600,
+                    (elapsed % 3600) / 60,
+                    elapsed % 60,
+                )
+            } else if elapsed >= 3600 {
+                format!(
+                    "▲{:02}:{:02}:{:02}",
+                    elapsed / 3600,
+                    (elapsed % 3600) / 60,
+                    elapsed % 60,
+                )
             } else {
                 format!("▲{:02}:{:02}", elapsed / 60, elapsed % 60)
             };
@@ -757,7 +770,20 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
                 status_char.clone(),
                 Style::default().fg(status_color),
             ));
-            let name_cell = Cell::from(Span::styled(p.name.clone(), name_style));
+            let state_badge = if is_active {
+                match &app.connection_state {
+                    ConnectionState::Connected { .. } => " ✓",
+                    ConnectionState::Connecting { .. } => " …",
+                    ConnectionState::Disconnecting { .. } => " ⏻",
+                    ConnectionState::Disconnected => "",
+                }
+            } else {
+                ""
+            };
+            let name_cell = Cell::from(Line::from(vec![
+                Span::styled(p.name.clone(), name_style),
+                Span::styled(state_badge, Style::default().fg(active_color)),
+            ]));
             let proto_cell = Cell::from(Span::styled(proto_icon, Style::default().fg(proto_color)));
             let time_cell =
                 Cell::from(Span::styled(time_str, Style::default().fg(Color::DarkGray)));
@@ -812,7 +838,14 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     let max_down = app.down_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
     let max_up = app.up_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
     let peak = (max_down.max(max_up) * 1.2).max(1024.0 * 1024.0 * 0.5);
-    let peak_label = format!(" Peak: {:.1} MB/s ", peak / 1024.0 / 1024.0);
+    let (scale_val, scale_unit) = if peak >= 1024.0 * 1024.0 * 1024.0 {
+        (peak / 1024.0 / 1024.0 / 1024.0, "GB/s")
+    } else if peak >= 1024.0 * 1024.0 {
+        (peak / 1024.0 / 1024.0, "MB/s")
+    } else {
+        (peak / 1024.0, "KB/s")
+    };
+    let peak_label = format!(" Peak: {scale_val:.1} {scale_unit} ");
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -822,6 +855,13 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(Span::styled(
                 peak_label,
                 Style::default().fg(theme::NORD_POLAR_NIGHT_4),
+            ))
+            .right_aligned(),
+        )
+        .title_bottom(
+            Line::from(Span::styled(
+                format!(" Scale: 0 – {scale_val:.1} {scale_unit} "),
+                Style::default().fg(Color::DarkGray),
             ))
             .right_aligned(),
         );
