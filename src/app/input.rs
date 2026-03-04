@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::{App, AuthField, FocusedPanel, InputMode, ToastType};
+use super::{App, AuthField, ConnectionState, FocusedPanel, InputMode, ToastType};
 use crate::constants;
 use crate::logger;
 use crate::message::{self, Message, ScrollMove, SelectionMove};
@@ -446,13 +446,29 @@ impl App {
                 KeyCode::Char('R') => {
                     if let Some(idx) = self.profile_list_state.selected() {
                         if let Some(profile) = self.profiles.get(idx) {
-                            let name = profile.name.clone();
-                            let len = name.len();
-                            self.input_mode = InputMode::Rename {
-                                index: idx,
-                                new_name: name,
-                                cursor: len,
+                            let active_profile = match &self.connection_state {
+                                ConnectionState::Connected { profile: p, .. }
+                                | ConnectionState::Connecting { profile: p, .. }
+                                | ConnectionState::Disconnecting { profile: p, .. } => {
+                                    Some(p.as_str())
+                                }
+                                ConnectionState::Disconnected => None,
                             };
+                            if active_profile == Some(&profile.name) {
+                                self.show_toast(
+                                    "Cannot rename an active profile — disconnect first"
+                                        .to_string(),
+                                    ToastType::Warning,
+                                );
+                            } else {
+                                let name = profile.name.clone();
+                                let len = name.len();
+                                self.input_mode = InputMode::Rename {
+                                    index: idx,
+                                    new_name: name,
+                                    cursor: len,
+                                };
+                            }
                         }
                     }
                 }

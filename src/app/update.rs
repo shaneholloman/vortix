@@ -335,7 +335,8 @@ impl App {
                 self.retry_profile_idx = Some(idx);
 
                 let base = self.config.connect_retry_base_delay_secs;
-                let delay_secs = base.saturating_mul(1 << (attempt - 1));
+                let shift = (attempt - 1).min(63);
+                let delay_secs = base.saturating_mul(1u64 << shift);
 
                 self.log(&format!(
                     "RETRY: Attempt {attempt}/{max_retries} for '{profile}' in {delay_secs}s..."
@@ -911,9 +912,7 @@ impl App {
     fn handle_tick(&mut self) {
         // 1. Connection Timeout Safeguard
         if let ConnectionState::Connecting { started, profile } = &self.connection_state {
-            if started.elapsed()
-                > std::time::Duration::from_secs(constants::DEFAULT_CONNECT_TIMEOUT)
-            {
+            if started.elapsed() > std::time::Duration::from_secs(self.config.connect_timeout) {
                 let p = profile.clone();
                 self.handle_message(Message::ConnectionTimeout(p));
             }

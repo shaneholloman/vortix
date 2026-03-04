@@ -106,6 +106,20 @@ impl App {
             return;
         }
 
+        let trimmed = new_name.trim();
+        if trimmed.is_empty()
+            || trimmed.contains('/')
+            || trimmed.contains('\\')
+            || trimmed.contains("..")
+            || trimmed.starts_with('.')
+        {
+            self.show_toast(
+                "Invalid name: must not contain path separators or '..'".to_string(),
+                ToastType::Warning,
+            );
+            return;
+        }
+
         let old_name = self.profiles[idx].name.clone();
         let old_path = self.profiles[idx].config_path.clone();
 

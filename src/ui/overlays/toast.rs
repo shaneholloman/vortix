@@ -13,7 +13,9 @@ use ratatui::{
 pub fn render(frame: &mut Frame, app: &App) {
     if let Some(ref toast) = app.toast {
         let area = frame.area();
-        let width = (area.width / 3).clamp(28, 50);
+        let width = (area.width / 3)
+            .clamp(28, 50)
+            .min(area.width.saturating_sub(2));
 
         let inner_width = width.saturating_sub(4) as usize;
         let text_len = toast.message.len();

@@ -527,7 +527,8 @@ mod profile_import {
 
     #[test]
     fn import_directory_with_mixed_files() {
-        let dir = std::env::temp_dir().join("vortix_bulk_import_test");
+        let dir =
+            std::env::temp_dir().join(format!("vortix_bulk_import_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
 

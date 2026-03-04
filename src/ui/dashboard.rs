@@ -1153,10 +1153,25 @@ fn render_security_guard(frame: &mut Frame, app: &App, area: Rect) {
     )]));
 
     let available_height = inner.height as usize;
-    if audit.len() > available_height {
-        audit.retain(|line| {
-            !line.spans.is_empty() || line.spans.iter().any(|s| !s.content.is_empty())
-        });
+    if available_height > 0 && audit.len() > available_height {
+        let mut compacted = Vec::with_capacity(available_height);
+        let mut blank_budget = 2usize;
+
+        for line in audit {
+            let is_blank =
+                line.spans.is_empty() || line.spans.iter().all(|s| s.content.trim().is_empty());
+            if is_blank {
+                if blank_budget == 0 {
+                    continue;
+                }
+                blank_budget -= 1;
+            }
+            compacted.push(line);
+            if compacted.len() == available_height {
+                break;
+            }
+        }
+        audit = compacted;
     }
 
     frame.render_widget(Paragraph::new(audit), inner);

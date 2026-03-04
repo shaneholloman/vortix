@@ -63,8 +63,8 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
 
 pub fn render(frame: &mut Frame) {
     let area = frame.area();
-    let width = (area.width - 4).min(65);
-    let height = (area.height - 2).min(38);
+    let width = area.width.saturating_sub(4).min(65);
+    let height = area.height.saturating_sub(2).min(38);
     let overlay = Rect {
         x: (area.width / 2).saturating_sub(width / 2),
         y: (area.height / 2).saturating_sub(height / 2),
