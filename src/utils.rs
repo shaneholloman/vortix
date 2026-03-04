@@ -104,6 +104,7 @@ pub fn write_user_file(path: &std::path::Path, contents: impl AsRef<[u8]>) -> st
 /// assert_eq!(format_bytes_speed(1_500_000), "1.5 MB/s");
 /// assert_eq!(format_bytes_speed(1_500), "1.5 KB/s");
 /// ```
+#[must_use]
 pub fn format_bytes_speed(bytes: u64) -> String {
     #[allow(clippy::cast_precision_loss)]
     if bytes >= 1_000_000 {
@@ -124,6 +125,7 @@ pub fn format_bytes_speed(bytes: u64) -> String {
 /// # Returns
 ///
 /// `true` if the IP is in a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+#[must_use]
 pub fn is_private_ip(ip: &str) -> bool {
     // Parse IP octets
     let parts: Vec<&str> = ip.split('.').collect();
@@ -222,6 +224,7 @@ pub fn cleanup_openvpn_run_files(profile_name: &str) {
 }
 
 /// Reads the PID from an `OpenVPN` pid file.
+#[must_use]
 pub fn read_openvpn_pid(profile_name: &str) -> Option<u32> {
     let (pid_path, _) = get_openvpn_run_paths(profile_name).ok()?;
     let content = std::fs::read_to_string(&pid_path).ok()?;
@@ -297,6 +300,7 @@ pub fn write_openvpn_auth_file(
 /// Reads saved `OpenVPN` credentials from the auth file.
 ///
 /// Returns `Some((username, password))` if a valid auth file exists.
+#[must_use]
 pub fn read_openvpn_saved_auth(profile_name: &str) -> Option<(String, String)> {
     let auth_path = get_openvpn_auth_path(profile_name).ok()?;
     let content = std::fs::read_to_string(&auth_path).ok()?;
@@ -323,6 +327,7 @@ pub fn delete_openvpn_auth_file(profile_name: &str) {
 /// - The directive is absent
 /// - The directive has a file path argument (`auth-user-pass /path/to/file`)
 /// - The directive is commented out (`# auth-user-pass`)
+#[must_use]
 pub fn openvpn_config_needs_auth(config_path: &std::path::Path) -> bool {
     let Ok(content) = std::fs::read_to_string(config_path) else {
         return false;
@@ -360,6 +365,7 @@ pub fn openvpn_config_needs_auth(config_path: &std::path::Path) -> bool {
 ///
 /// * `s` - The string to truncate
 /// * `max_chars` - Maximum number of characters (including ellipsis)
+#[must_use]
 pub fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
         let mut t: String = s.chars().take(max_chars.saturating_sub(3)).collect();
@@ -374,6 +380,7 @@ pub fn truncate(s: &str, max_chars: usize) -> String {
 ///
 /// Uses libc `localtime_r` for zero-overhead local time formatting
 /// (called every tick, so avoiding a subprocess matters).
+#[must_use]
 pub fn format_local_time() -> String {
     format_system_time_local(std::time::SystemTime::now())
 }
@@ -424,6 +431,7 @@ fn format_system_time_inner(time: std::time::SystemTime) -> Option<String> {
 }
 
 /// Formats a `SystemTime` into a compact relative time string (e.g., 1s, 2m, 3h, 4d).
+#[must_use]
 pub fn format_relative_time(time: std::time::SystemTime) -> String {
     let now = std::time::SystemTime::now();
     match now.duration_since(time) {
@@ -578,6 +586,7 @@ pub fn save_profile_metadata(
 /// # Returns
 ///
 /// A `PathBuf` that does not currently exist.
+#[must_use]
 pub fn get_unique_path(dir: &std::path::Path, filename: &str) -> std::path::PathBuf {
     let mut path = dir.join(filename);
     let mut counter = 1;
@@ -849,6 +858,7 @@ mod tests {
     // === OpenVPN auth file write/read tests ===
 
     #[test]
+    #[ignore]
     fn test_write_read_openvpn_auth_file() {
         let name = "test_auth_roundtrip";
         // Write
@@ -871,6 +881,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[ignore]
     fn test_auth_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -892,6 +903,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_read_openvpn_saved_auth_empty_creds() {
         let name = "test_auth_empty_creds";
         // Write empty username

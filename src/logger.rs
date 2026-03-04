@@ -25,6 +25,7 @@ pub enum LogLevel {
 #[allow(dead_code)]
 impl LogLevel {
     /// Get the prefix string for this log level
+    #[must_use]
     pub const fn prefix(self) -> &'static str {
         match self {
             Self::Debug => "DEBUG",
@@ -35,6 +36,7 @@ impl LogLevel {
     }
 
     /// Get the color for this log level (Nord theme)
+    #[must_use]
     pub const fn color(self) -> ratatui::style::Color {
         use ratatui::style::Color;
         match self {
@@ -59,6 +61,7 @@ pub struct LogEntry {
 impl LogEntry {
     /// Format the log entry as a structured line:
     /// `[HH:MM:SS] [LEVEL] CATEGORY: message`
+    #[must_use]
     pub fn format(&self) -> String {
         let time_str = crate::utils::format_system_time_local(self.timestamp);
         format!(
@@ -150,6 +153,7 @@ pub fn log(level: LogLevel, category: &str, message: impl Into<String>) {
 }
 
 /// Get all log entries (for display in TUI)
+#[must_use]
 pub fn get_logs() -> Vec<LogEntry> {
     get_logger()
         .lock()

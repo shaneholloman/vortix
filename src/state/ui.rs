@@ -67,6 +67,24 @@ pub enum InputMode {
         /// Is "Yes" selected?
         confirm_selected: bool,
     },
+    /// Help overlay showing all keybindings.
+    Help,
+    /// Profile rename dialog.
+    Rename {
+        /// Index of the profile being renamed.
+        index: usize,
+        /// New name being typed.
+        new_name: String,
+        /// Cursor position.
+        cursor: usize,
+    },
+    /// Profile search/filter mode.
+    Search {
+        /// Current search query string.
+        query: String,
+        /// Cursor position in the query.
+        cursor: usize,
+    },
     /// `OpenVPN` authentication credentials dialog.
     AuthPrompt {
         /// Index of the profile requiring auth.
@@ -118,6 +136,7 @@ pub struct Toast {
 
 impl Toast {
     /// Check if the toast notification has expired
+    #[must_use]
     pub fn is_expired(&self) -> bool {
         Instant::now() > self.expires
     }

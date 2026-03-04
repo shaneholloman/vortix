@@ -438,6 +438,7 @@ pub fn get_profiles_dir() -> Result<PathBuf, String> {
 }
 
 /// Load all profiles from the profiles directory
+#[must_use]
 pub fn load_profiles() -> Vec<VpnProfile> {
     logger::log(LogLevel::Debug, "PROFILE", "Loading profiles from disk...");
 

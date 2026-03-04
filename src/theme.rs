@@ -113,3 +113,12 @@ pub const BTN_CONNECT_BG: Color = CYAN_PRIMARY;
 pub const BTN_TERMINATE_BG: Color = CORAL_RED;
 /// Default button background.
 pub const BTN_DEFAULT_BG: Color = Color::Rgb(71, 85, 105);
+
+// === Footer / Key Hint Colors ===
+
+/// Color for keyboard shortcut keys in hints.
+pub const KEY_HINT: Color = CYAN_PRIMARY;
+/// Color for key hint descriptions.
+pub const KEY_HINT_DESC: Color = Color::DarkGray;
+/// Footer/UI separator color.
+pub const SEPARATOR: Color = NORD_POLAR_NIGHT_4;

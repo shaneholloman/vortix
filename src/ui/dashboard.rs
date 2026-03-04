@@ -129,6 +129,17 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             *save_credentials,
             *connect_after,
         ),
+        InputMode::Rename {
+            new_name, cursor, ..
+        } => {
+            render_rename_overlay(frame, new_name, *cursor);
+        }
+        InputMode::Help => {
+            super::overlays::help::render(frame);
+        }
+        InputMode::Search { query, cursor } => {
+            render_search_bar(frame, query, *cursor, app.profiles.len());
+        }
         InputMode::Normal => {}
     }
 
@@ -414,6 +425,7 @@ fn render_auth_overlay(
     frame.render_widget(Paragraph::new(text).alignment(Alignment::Left), inner);
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
     let (status_text, color, profile_name, _location_text, _iface_text, since) =
         get_connection_info(app);
@@ -437,16 +449,29 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
                 ks_indicator,
             ])
         }
-        ConnectionState::Connecting { .. } | ConnectionState::Disconnecting { .. } => {
-            // Transitional states - show profile name
+        ConnectionState::Connecting { started, .. }
+        | ConnectionState::Disconnecting { started, .. } => {
+            let elapsed = started.elapsed().as_secs();
+            let spinner_frames = ['◐', '◓', '◑', '◒'];
+            #[allow(clippy::cast_possible_truncation)]
+            let spinner = spinner_frames[(elapsed as usize) % spinner_frames.len()];
+            let action = if matches!(app.connection_state, ConnectionState::Connecting { .. }) {
+                "CONNECTING"
+            } else {
+                "DISCONNECTING"
+            };
             Line::from(vec![
                 Span::styled(
-                    status_text,
+                    format!("{spinner} {action}"),
                     Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!(" ({profile_name})"),
                     Style::default().fg(theme::TEXT_SECONDARY),
+                ),
+                Span::styled(
+                    format!(" {elapsed}s"),
+                    Style::default().fg(theme::ACCENT_SECONDARY),
                 ),
                 Span::styled(" │", Style::default().fg(theme::NORD_POLAR_NIGHT_4)),
                 ks_indicator,
@@ -614,8 +639,26 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
     frame.render_widget(block, area);
 
     if app.profiles.is_empty() {
+        let empty_msg = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "No profiles yet",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    "[i]",
+                    Style::default()
+                        .fg(theme::ACCENT_PRIMARY)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" to import", Style::default().fg(Color::DarkGray)),
+            ]),
+        ];
         frame.render_widget(
-            Paragraph::new("No profiles found").alignment(Alignment::Center),
+            Paragraph::new(empty_msg).alignment(Alignment::Center),
             inner,
         );
         return;
@@ -637,14 +680,19 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             let is_active = active_profile.as_ref() == Some(&p.name);
             let is_never_used = p.last_used.is_none();
 
-            // Status indicator — color matches connection state (green=connected, yellow=transitioning)
             let (status_char, status_color) = if is_active {
-                ("●", active_color)
+                ("●".to_string(), active_color)
+            } else if idx < 9 {
+                (format!("{}", idx + 1), theme::TEXT_SECONDARY)
             } else {
-                (" ", Color::Reset)
+                (" ".to_string(), Color::Reset)
             };
 
-            let name_style = if is_selected {
+            let name_style = if is_selected && is_active {
+                Style::default()
+                    .fg(active_color)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_selected {
                 Style::default()
                     .fg(theme::ROW_SELECTED_FG)
                     .add_modifier(Modifier::BOLD)
@@ -688,8 +736,10 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             };
 
             // Create cells for each column
-            let status_cell =
-                Cell::from(Span::styled(status_char, Style::default().fg(status_color)));
+            let status_cell = Cell::from(Span::styled(
+                status_char.clone(),
+                Style::default().fg(status_color),
+            ));
             let name_cell = Cell::from(Span::styled(p.name.clone(), name_style));
             let proto_cell = Cell::from(Span::styled(proto_icon, Style::default().fg(proto_color)));
             let time_cell =
@@ -895,8 +945,12 @@ fn render_security_guard(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Connected - show security checklist with visual indicators
-    let dns_leaking = utils::is_private_ip(&app.dns_server);
+    // DNS leak: if current DNS matches the pre-VPN DNS, queries may not be tunneled.
+    // A changed DNS (even private like 10.8.0.1) means the VPN pushed its own resolver.
+    let dns_leaking = match &app.real_dns {
+        Some(real_dns) => &app.dns_server == real_dns,
+        None => false, // can't determine yet, assume OK
+    };
 
     // Check if IP is actually masked (different from real IP captured when disconnected)
     let ip_status = match &app.real_ip {
@@ -1079,12 +1133,31 @@ fn render_security_guard(frame: &mut Frame, app: &App, area: Rect) {
         Span::styled(encryption_info, Style::default().fg(theme::NORD_YELLOW)),
     ]));
 
-    // Last checked timestamp (static for now, could be dynamic)
+    let last_checked_text = match app.last_security_check {
+        Some(t) => {
+            let secs = t.elapsed().as_secs();
+            if secs < 5 {
+                "Last checked: just now".to_string()
+            } else if secs < 60 {
+                format!("Last checked: {secs}s ago")
+            } else {
+                format!("Last checked: {}m ago", secs / 60)
+            }
+        }
+        None => "Last checked: pending...".to_string(),
+    };
     audit.push(Line::from(""));
     audit.push(Line::from(vec![Span::styled(
-        "Last checked: just now",
+        last_checked_text,
         Style::default().fg(Color::DarkGray),
     )]));
+
+    let available_height = inner.height as usize;
+    if audit.len() > available_height {
+        audit.retain(|line| {
+            !line.spans.is_empty() || line.spans.iter().any(|s| !s.content.is_empty())
+        });
+    }
 
     frame.render_widget(Paragraph::new(audit), inner);
 }
@@ -1695,4 +1768,85 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
 
         frame.render_widget(Paragraph::new(text), inner);
     }
+}
+
+fn render_rename_overlay(frame: &mut Frame, name: &str, _cursor: usize) {
+    let area = frame.area();
+    let width = 45u16.min(area.width - 4);
+    let height = 5u16;
+    let overlay = Rect {
+        x: (area.width / 2).saturating_sub(width / 2),
+        y: (area.height / 2).saturating_sub(height / 2),
+        width,
+        height,
+    };
+
+    frame.render_widget(Clear, overlay);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::ACCENT_PRIMARY))
+        .title(Span::styled(
+            " Rename Profile ",
+            Style::default()
+                .fg(theme::ACCENT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title_bottom(Span::styled(
+            " Enter confirm │ Esc cancel ",
+            Style::default().fg(Color::DarkGray),
+        ));
+
+    let inner = block.inner(overlay);
+    frame.render_widget(block, overlay);
+
+    let spans = vec![
+        Span::styled("> ", Style::default().fg(theme::ACCENT_PRIMARY)),
+        Span::styled(name, Style::default().fg(theme::TEXT_PRIMARY)),
+        Span::styled("▌", Style::default().fg(theme::ACCENT_PRIMARY)),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).alignment(Alignment::Left),
+        inner,
+    );
+}
+
+fn render_search_bar(frame: &mut Frame, query: &str, _cursor: usize, _total: usize) {
+    let area = frame.area();
+    let bar_area = Rect {
+        x: 1,
+        y: area.height.saturating_sub(3),
+        width: area.width.saturating_sub(2).min(50),
+        height: 3,
+    };
+
+    frame.render_widget(Clear, bar_area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::ACCENT_PRIMARY))
+        .title(Span::styled(
+            " Search ",
+            Style::default()
+                .fg(theme::ACCENT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner = block.inner(bar_area);
+    frame.render_widget(block, bar_area);
+
+    let mut spans = vec![
+        Span::styled("/", Style::default().fg(theme::ACCENT_PRIMARY)),
+        Span::styled(query, Style::default().fg(theme::TEXT_PRIMARY)),
+    ];
+
+    if query.is_empty() {
+        spans.push(Span::styled(
+            "type to filter...",
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), inner);
 }

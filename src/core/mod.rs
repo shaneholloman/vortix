@@ -10,6 +10,7 @@
 pub mod downloader;
 pub mod importer;
 pub mod killswitch;
+pub mod network_monitor;
 pub mod scanner;
 pub mod telemetry;
 

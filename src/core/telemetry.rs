@@ -82,6 +82,7 @@ pub enum TelemetryUpdate {
 /// # Panics
 ///
 /// This function does not panic. All errors in background threads are silently handled.
+#[must_use]
 pub fn spawn_telemetry_worker(config: TelemetryConfig) -> (Receiver<TelemetryUpdate>, Sender<()>) {
     let (tx, rx) = mpsc::channel();
     let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
@@ -509,6 +510,7 @@ pub struct PingStats {
 /// - Linux: "rtt min/avg/max/mdev = 1.234/5.678/9.012/3.456 ms"
 /// - macOS loss: "10 packets transmitted, 8 packets received, 20.0% packet loss"
 /// - Linux loss: "10 packets transmitted, 8 received, 20% packet loss, time 9001ms"
+#[must_use]
 pub fn parse_ping_output(output: &str) -> PingStats {
     let mut stats = PingStats::default();
 
@@ -560,6 +562,7 @@ pub fn parse_ping_output(output: &str) -> PingStats {
 ///
 /// Format: `iface: rx_bytes rx_packets rx_errs ... tx_bytes tx_packets tx_errs ...`
 /// Returns (`total_bytes_in`, `total_bytes_out`) excluding loopback.
+#[must_use]
 pub fn parse_proc_net_dev(content: &str) -> (u64, u64) {
     let mut total_in: u64 = 0;
     let mut total_out: u64 = 0;
@@ -602,6 +605,7 @@ pub fn parse_proc_net_dev(content: &str) -> (u64, u64) {
 #[allow(dead_code)]
 ///
 /// Returns (`ip_address`, `mtu`).
+#[must_use]
 pub fn parse_ip_addr_output(output: &str) -> (String, String) {
     let mut ip = String::new();
     let mut mtu = String::new();
@@ -948,6 +952,10 @@ Inter-|   Receive                                                |  Transmit
             log_retention_days: 7,
             disconnect_timeout: 30,
             openvpn_verbosity: "3".to_string(),
+            connect_max_retries: 3,
+            connect_retry_base_delay_secs: 2,
+            auto_reconnect: true,
+            auto_reconnect_delay_secs: 3,
         };
 
         let tel_cfg = TelemetryConfig::from(&app_cfg);

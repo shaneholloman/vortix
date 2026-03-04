@@ -106,6 +106,15 @@ pub enum Message {
     Tick,
     /// Connection timeout detected
     ConnectionTimeout(String),
+    /// Default gateway changed (network switch, sleep/wake)
+    NetworkChanged,
+    /// Retry a failed connection after exponential backoff delay
+    RetryConnect {
+        /// Profile index to retry
+        idx: usize,
+        /// Which attempt this is (1-based)
+        attempt: u32,
+    },
     /// Result from the background connect thread
     ConnectResult {
         /// Profile name that was being connected
@@ -165,6 +174,7 @@ pub struct ActionMenuItem {
 }
 
 /// Get specific actions for the focused item/panel (triggered by 'x')
+#[must_use]
 pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
     let mut actions = Vec::new();
 
@@ -237,6 +247,7 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
 }
 
 /// Get bulk/global actions (triggered by 'b')
+#[must_use]
 pub fn get_bulk_actions() -> Vec<ActionMenuItem> {
     vec![
         ActionMenuItem {

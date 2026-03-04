@@ -60,6 +60,7 @@ pub struct ActiveSession {
 /// # Returns
 ///
 /// A vector of [`ActiveSession`] structs for each detected active connection.
+#[must_use]
 pub fn get_active_profiles(profiles: &[VpnProfile]) -> Vec<ActiveSession> {
     let mut active = Vec::new();
 

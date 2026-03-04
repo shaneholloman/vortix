@@ -39,6 +39,7 @@ impl EventHandler {
     /// # Arguments
     ///
     /// * `tick_rate_ms` - Milliseconds between tick events
+    #[must_use]
     pub fn new(tick_rate_ms: u64) -> Self {
         let tick_rate = Duration::from_millis(tick_rate_ms);
         let (sender, receiver) = mpsc::channel();

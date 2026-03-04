@@ -1,9 +1,9 @@
 //! Footer widget with context-aware keybinding hints
 
-use crate::app::App;
+use crate::app::{App, ConnectionState};
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
     Frame,
@@ -32,20 +32,31 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
         crate::app::FocusedPanel::Logs => "Logs",
     };
 
-    // Build essential global hints
     let mut hints = Vec::new();
 
-    // Only show 1-9 hint if there are profiles
     if !app.profiles.is_empty() {
         hints.push(("1-9", "Quick Connect"));
     }
 
+    let disconnect_hint = match &app.connection_state {
+        ConnectionState::Connecting { .. } => ("d", "Cancel"),
+        ConnectionState::Disconnecting { .. } => ("d", "Force Kill"),
+        ConnectionState::Connected { .. } => ("d", "Disconnect"),
+        ConnectionState::Disconnected => {
+            if app.last_connected_profile.is_some() {
+                ("r", "Reconnect")
+            } else {
+                ("c", "Connect")
+            }
+        }
+    };
+
     hints.extend_from_slice(&[
         ("i", "Import"),
-        ("d", "Disconnect"),
+        disconnect_hint,
         ("Tab", "Panel"),
         ("K", "Kill Switch"),
-        ("x", "Menu"),
+        ("?", "Help"),
         ("q", "Quit"),
     ]);
 
@@ -68,13 +79,12 @@ fn render_hints(frame: &mut Frame, area: Rect, hints: &[(&str, &str)], panel_nam
     let mut current_width = 0;
     let max_width = chunks[0].width as usize;
 
-    // Add panel indicator if provided
     if let Some(panel) = panel_name {
         let panel_indicator = format!("[{panel}] ");
         hint_spans.push(Span::styled(
             panel_indicator.clone(),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(crate::theme::KEY_HINT)
                 .add_modifier(Modifier::BOLD),
         ));
         current_width += panel_indicator.len();
@@ -84,8 +94,6 @@ fn render_hints(frame: &mut Frame, area: Rect, hints: &[(&str, &str)], panel_nam
     }
 
     for (i, (key, action)) in hints.iter().enumerate() {
-        // Calculate item width: "key" + " " + "action" + " | " (separator)
-        // Separator is 3 chars " | " for i > 0
         let sep_width = if i > 0 { 3 } else { 0 };
         let item_width = key.len() + 1 + action.len() + sep_width;
 
@@ -96,17 +104,20 @@ fn render_hints(frame: &mut Frame, area: Rect, hints: &[(&str, &str)], panel_nam
         if i > 0 {
             hint_spans.push(Span::styled(
                 " │ ",
-                Style::default().fg(Color::Rgb(50, 50, 50)),
+                Style::default().fg(crate::theme::SEPARATOR),
             ));
         }
         hint_spans.push(Span::styled(
             *key,
             Style::default()
-                .fg(Color::Cyan)
+                .fg(crate::theme::KEY_HINT)
                 .add_modifier(Modifier::BOLD),
         ));
         hint_spans.push(Span::raw(" "));
-        hint_spans.push(Span::styled(*action, Style::default().fg(Color::DarkGray)));
+        hint_spans.push(Span::styled(
+            *action,
+            Style::default().fg(crate::theme::KEY_HINT_DESC),
+        ));
 
         current_width += item_width;
     }
