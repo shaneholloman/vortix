@@ -49,6 +49,7 @@ fn test_app() -> App {
         show_bulk_menu: false,
         action_menu_state: ratatui::widgets::ListState::default(),
         config_scroll: 0,
+        cached_config_content: None,
         profile_list_state: ratatui::widgets::TableState::default(),
         panel_areas: std::collections::HashMap::new(),
         toast: None,

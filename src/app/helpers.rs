@@ -144,18 +144,13 @@ impl App {
     /// Get the maximum scroll position for the config viewer.
     /// This accounts for viewport height so scrolling stops when last line is visible.
     pub(crate) fn get_config_max_scroll(&self) -> u16 {
-        if let Some(idx) = self.profile_list_state.selected() {
-            if let Some(profile) = self.profiles.get(idx) {
-                if let Ok(content) = std::fs::read_to_string(&profile.config_path) {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let total_lines = content.lines().count() as u16;
-                    // Viewport height: percentage of terminal height minus chrome (borders, title, etc.)
-                    let viewport_height =
-                        (self.terminal_size.1 * constants::CONFIG_VIEWER_HEIGHT_PCT / 100)
-                            .saturating_sub(constants::CONFIG_VIEWER_CHROME_LINES);
-                    return total_lines.saturating_sub(viewport_height);
-                }
-            }
+        if let Some(content) = &self.cached_config_content {
+            #[allow(clippy::cast_possible_truncation)]
+            let total_lines = content.lines().count() as u16;
+            let viewport_height = (self.terminal_size.1 * constants::CONFIG_VIEWER_HEIGHT_PCT
+                / 100)
+                .saturating_sub(constants::CONFIG_VIEWER_CHROME_LINES);
+            return total_lines.saturating_sub(viewport_height);
         }
         0
     }

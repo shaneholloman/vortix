@@ -144,6 +144,11 @@ pub const NETWORK_HISTORY_SIZE: usize = 60;
 pub const LOGS_AUTO_SCROLL_THRESHOLD: u16 = 5;
 /// Number of profiles to jump when pressing Page Up / Page Down.
 pub const PROFILE_LIST_PAGE_SIZE: usize = 10;
+/// Minimum terminal width required for a usable layout.
+pub const MIN_TERMINAL_WIDTH: u16 = 60;
+/// Minimum terminal height required for a usable layout.
+pub const MIN_TERMINAL_HEIGHT: u16 = 20;
+
 /// Config viewer viewport height as a percentage of terminal height.
 pub const CONFIG_VIEWER_HEIGHT_PCT: u16 = 85;
 /// Lines of chrome (borders, title, etc.) to subtract from the config viewer viewport.

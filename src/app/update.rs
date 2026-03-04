@@ -36,8 +36,15 @@ impl App {
                 }
             }
             Message::OpenConfig => {
-                if self.profile_list_state.selected().is_some() {
+                if let Some(idx) = self.profile_list_state.selected() {
+                    if let Some(profile) = self.profiles.get(idx) {
+                        self.cached_config_content = Some(
+                            std::fs::read_to_string(&profile.config_path)
+                                .unwrap_or_else(|e| format!("Error reading config: {e}")),
+                        );
+                    }
                     self.show_config = true;
+                    self.config_scroll = 0;
                 }
             }
             Message::ManageAuth => self.handle_manage_auth(),
@@ -101,6 +108,7 @@ impl App {
             }
             Message::CloseOverlay => {
                 self.show_config = false;
+                self.cached_config_content = None;
                 self.show_action_menu = false;
                 self.show_bulk_menu = false;
                 self.zoomed_panel = None;
