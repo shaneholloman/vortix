@@ -1516,7 +1516,7 @@ fn render_activity_log(frame: &mut Frame, app: &App, area: Rect) {
     let start_idx = if app.logs_auto_scroll {
         all_logs.len().saturating_sub(visible_lines)
     } else {
-        app.logs_scroll as usize
+        (app.logs_scroll as usize).min(all_logs.len().saturating_sub(1))
     };
 
     let end_idx = (start_idx + visible_lines).min(all_logs.len());

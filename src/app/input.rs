@@ -567,6 +567,8 @@ impl App {
                             None | Some(_) => "All",
                         };
                         self.show_toast(format!("Log filter: {label}"), super::ToastType::Info);
+                        self.logs_scroll = 0;
+                        self.logs_auto_scroll = true;
                     }
                     KeyCode::Char('L') => self.handle_message(Message::ClearLogs),
                     _ => {}
