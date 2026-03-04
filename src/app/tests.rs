@@ -61,6 +61,7 @@ fn test_app() -> App {
         config_dir: std::env::temp_dir().join("vortix_test"),
         connection_drops: 0,
         pending_connect: None,
+        sort_order: crate::state::ProfileSortOrder::default(),
         killswitch_mode: crate::state::KillSwitchMode::Off,
         killswitch_state: crate::state::KillSwitchState::Disabled,
         retry_count: 0,
@@ -1229,5 +1230,48 @@ fn test_confirm_switch_when_already_disconnected_connects_directly() {
         matches!(app.connection_state, ConnectionState::Connecting { ref profile, .. } if profile == "vpn-b"),
         "Should connect directly when already disconnected, got {:?}",
         app.connection_state
+    );
+}
+
+#[test]
+fn test_cycle_sort_order() {
+    use crate::state::ProfileSortOrder;
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["charlie", "alpha", "bravo"]);
+    app.profile_list_state.select(Some(0));
+
+    assert_eq!(app.sort_order, ProfileSortOrder::NameAsc);
+
+    app.handle_message(Message::CycleSortOrder);
+    assert_eq!(app.sort_order, ProfileSortOrder::NameDesc);
+    assert_eq!(app.profiles[0].name, "charlie");
+
+    app.handle_message(Message::CycleSortOrder);
+    assert_eq!(app.sort_order, ProfileSortOrder::LastUsed);
+
+    app.handle_message(Message::CycleSortOrder);
+    assert_eq!(app.sort_order, ProfileSortOrder::Protocol);
+
+    app.handle_message(Message::CycleSortOrder);
+    assert_eq!(app.sort_order, ProfileSortOrder::NameAsc);
+    assert_eq!(app.profiles[0].name, "alpha");
+}
+
+#[test]
+fn test_sort_preserves_selection() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["charlie", "alpha", "bravo"]);
+    app.profile_list_state.select(Some(1)); // "alpha" (unsorted order)
+
+    let selected_name = app.profiles[1].name.clone();
+    assert_eq!(selected_name, "alpha");
+
+    app.handle_message(Message::CycleSortOrder); // NameAsc -> NameDesc
+
+    let new_idx = app.profile_list_state.selected().unwrap();
+    assert_eq!(
+        app.profiles[new_idx].name, "alpha",
+        "Selection should follow the profile after re-sort"
     );
 }

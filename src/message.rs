@@ -159,6 +159,10 @@ pub enum Message {
     /// Clear saved credentials for the selected profile
     ClearAuth,
 
+    // === Profile Sorting ===
+    /// Cycle profile sort order (Name A-Z → Z-A → Last Used → Protocol)
+    CycleSortOrder,
+
     // === Kill Switch ===
     /// Toggle kill switch mode (Off → Auto → `AlwaysOn` → Off)
     ToggleKillSwitch,

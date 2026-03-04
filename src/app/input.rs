@@ -524,6 +524,7 @@ impl App {
                         );
                     }
                 }
+                KeyCode::Char('s') => self.handle_message(Message::CycleSortOrder),
                 KeyCode::Char('a') => self.handle_message(Message::ManageAuth),
                 KeyCode::Char('A') => self.handle_message(Message::ClearAuth),
                 KeyCode::Char('R') => {

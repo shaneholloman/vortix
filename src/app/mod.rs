@@ -36,8 +36,8 @@ use crate::utils;
 
 // Re-export state types for convenient access
 pub use crate::state::{
-    AuthField, ConnectionState, DetailedConnectionInfo, FocusedPanel, InputMode, Protocol, Toast,
-    ToastType, VpnProfile, DISMISS_DURATION,
+    AuthField, ConnectionState, DetailedConnectionInfo, FocusedPanel, InputMode, ProfileSortOrder,
+    Protocol, Toast, ToastType, VpnProfile, DISMISS_DURATION,
 };
 
 /// Main application state container.
@@ -121,6 +121,8 @@ pub struct App {
     pub connection_drops: u32,
     /// Profile index queued for auto-connect after current disconnect completes.
     pub pending_connect: Option<usize>,
+    /// Current sort order for the profile list.
+    pub sort_order: ProfileSortOrder,
 
     // === Kill Switch ===
     /// Kill switch operating mode (Off, Auto, `AlwaysOn`).
@@ -215,6 +217,7 @@ impl App {
             config_dir,
             connection_drops: 0,
             pending_connect: None,
+            sort_order: ProfileSortOrder::default(),
 
             // Kill switch - load from persisted state for crash recovery
             killswitch_mode: crate::state::KillSwitchMode::default(),
@@ -396,6 +399,7 @@ impl App {
             config_dir: std::env::temp_dir().join("vortix_test"),
             connection_drops: 0,
             pending_connect: None,
+            sort_order: ProfileSortOrder::default(),
             killswitch_mode: crate::state::KillSwitchMode::Off,
             killswitch_state: crate::state::KillSwitchState::Disabled,
             retry_count: 0,
