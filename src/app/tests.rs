@@ -1206,3 +1206,28 @@ fn test_search_match_count_updated() {
     app.apply_search_filter("");
     assert_eq!(app.search_match_count, 3, "Empty query should match all");
 }
+
+#[test]
+fn test_confirm_switch_when_already_disconnected_connects_directly() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a", "vpn-b"]);
+    app.profile_list_state.select(Some(0));
+    app.is_root = true;
+
+    assert!(matches!(
+        app.connection_state,
+        ConnectionState::Disconnected
+    ));
+
+    app.handle_message(Message::ConfirmSwitch { idx: 1 });
+
+    assert!(
+        app.pending_connect.is_none(),
+        "Should not set pending_connect when already disconnected"
+    );
+    assert!(
+        matches!(app.connection_state, ConnectionState::Connecting { ref profile, .. } if profile == "vpn-b"),
+        "Should connect directly when already disconnected, got {:?}",
+        app.connection_state
+    );
+}

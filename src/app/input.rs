@@ -245,8 +245,14 @@ impl App {
         {
             let idx = *to_idx;
             match key.code {
-                KeyCode::Tab | KeyCode::Left | KeyCode::Right | KeyCode::Char('h' | 'l') => {
+                KeyCode::Tab => {
                     *confirm_selected = !*confirm_selected;
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    *confirm_selected = true;
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    *confirm_selected = false;
                 }
                 KeyCode::Char('y') => {
                     self.handle_message(Message::ConfirmSwitch { idx });

@@ -62,11 +62,16 @@ impl App {
             }
             Message::ConfirmSwitch { idx } => {
                 self.input_mode = InputMode::Normal;
-                self.pending_connect = Some(idx);
                 if let Some(profile) = self.profiles.get(idx) {
                     self.log(&format!("ACTION: Switching to '{}'...", profile.name));
                 }
-                self.disconnect();
+                if matches!(self.connection_state, ConnectionState::Disconnected) {
+                    self.pending_connect = None;
+                    self.toggle_connection(idx);
+                } else {
+                    self.pending_connect = Some(idx);
+                    self.disconnect();
+                }
             }
             Message::ProfileMove(mv) => match mv {
                 SelectionMove::Next => self.profile_next(),

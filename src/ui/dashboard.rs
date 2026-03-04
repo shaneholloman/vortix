@@ -2062,10 +2062,10 @@ fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool)
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("       ", Style::default()),
-            Span::styled(" Yes ", yes_style),
-            Span::styled("   ", Style::default()),
-            Span::styled(" No ", no_style),
+            Span::styled("     ", Style::default()),
+            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
+            Span::styled("  ", Style::default()),
+            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
         ]),
     ];
 
