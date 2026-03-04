@@ -533,15 +533,27 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
                 ("─────", theme::TEXT_SECONDARY)
             };
 
-            // Build header with location (only when connected and location is known)
+            let proto_tag = app
+                .profiles
+                .iter()
+                .find(|p| p.name == profile_name)
+                .map_or("", |p| match p.protocol {
+                    Protocol::WireGuard => "WG",
+                    Protocol::OpenVPN => "OVPN",
+                });
+
             let mut header_spans = vec![
                 Span::styled(
                     status_text,
                     Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
-                    format!(" ({profile_name})"),
+                    format!(" ({profile_name}"),
                     Style::default().fg(theme::TEXT_SECONDARY),
+                ),
+                Span::styled(
+                    format!("/{proto_tag})"),
+                    Style::default().fg(theme::NORD_FROST_2),
                 ),
                 Span::styled(" │ ", Style::default().fg(theme::NORD_POLAR_NIGHT_4)),
                 Span::styled("VPN: ", Style::default().fg(theme::TEXT_SECONDARY)),
@@ -734,10 +746,9 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
                 Style::default().fg(theme::INACTIVE)
             };
 
-            // Protocol indicator
             let proto_icon = match p.protocol {
-                crate::app::Protocol::WireGuard => "W",
-                crate::app::Protocol::OpenVPN => "O",
+                crate::app::Protocol::WireGuard => "WG",
+                crate::app::Protocol::OpenVPN => "OV",
             };
             let proto_color = if is_active {
                 active_color
@@ -1136,6 +1147,17 @@ fn render_security_guard(frame: &mut Frame, app: &App, area: Rect) {
             Span::styled("  Provider: ", Style::default().fg(theme::TEXT_SECONDARY)),
             Span::styled(dns_provider, Style::default().fg(Color::DarkGray)),
         ]));
+    }
+    if let Some(real_dns) = &app.real_dns {
+        if dns_leaking {
+            audit.push(Line::from(vec![
+                Span::styled("  Pre-VPN : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                Span::styled(
+                    format!("{real_dns} (same!)"),
+                    Style::default().fg(theme::ERROR),
+                ),
+            ]));
+        }
     }
 
     audit.push(Line::from(""));
