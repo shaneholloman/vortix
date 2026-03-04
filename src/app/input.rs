@@ -436,6 +436,14 @@ impl App {
             KeyCode::Char('i') => self.handle_message(Message::OpenImport),
             KeyCode::Char('y') => self.handle_message(Message::CopyIp),
 
+            KeyCode::F(1) => self.handle_message(Message::FocusPanel(FocusedPanel::Sidebar)),
+            KeyCode::F(2) => {
+                self.handle_message(Message::FocusPanel(FocusedPanel::ConnectionDetails));
+            }
+            KeyCode::F(3) => self.handle_message(Message::FocusPanel(FocusedPanel::Chart)),
+            KeyCode::F(4) => self.handle_message(Message::FocusPanel(FocusedPanel::Security)),
+            KeyCode::F(5) => self.handle_message(Message::FocusPanel(FocusedPanel::Logs)),
+
             KeyCode::Char('K') => self.handle_message(Message::ToggleKillSwitch),
             KeyCode::Char('?') => {
                 self.input_mode = InputMode::Help { scroll: 0 };
@@ -451,6 +459,7 @@ impl App {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn handle_panel_keys(&mut self, key: KeyEvent) {
         match self.focused_panel {
             FocusedPanel::Sidebar => match key.code {
@@ -539,6 +548,25 @@ impl App {
                         // Jump to start
                         self.logs_auto_scroll = false;
                         self.logs_scroll = 0;
+                    }
+                    KeyCode::Char('f') => {
+                        self.log_level_filter = match self.log_level_filter {
+                            None => Some(crate::logger::LogLevel::Error),
+                            Some(crate::logger::LogLevel::Error) => {
+                                Some(crate::logger::LogLevel::Warning)
+                            }
+                            Some(crate::logger::LogLevel::Warning) => {
+                                Some(crate::logger::LogLevel::Info)
+                            }
+                            _ => None,
+                        };
+                        let label = match self.log_level_filter {
+                            Some(crate::logger::LogLevel::Error) => "Errors only",
+                            Some(crate::logger::LogLevel::Warning) => "Warn+Error",
+                            Some(crate::logger::LogLevel::Info) => "Info+Warn+Error",
+                            None | Some(_) => "All",
+                        };
+                        self.show_toast(format!("Log filter: {label}"), super::ToastType::Info);
                     }
                     KeyCode::Char('L') => self.handle_message(Message::ClearLogs),
                     _ => {}
