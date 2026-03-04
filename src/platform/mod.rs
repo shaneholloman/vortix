@@ -69,11 +69,13 @@ pub trait DnsResolver {
 
 /// Platform-appropriate install hint for a package.
 #[cfg(target_os = "macos")]
+#[must_use]
 pub fn install_hint(pkg: &str) -> String {
     format!("brew install {pkg}")
 }
 
 #[cfg(target_os = "linux")]
+#[must_use]
 pub fn install_hint(pkg: &str) -> String {
     format!("sudo apt install {pkg}  # or: sudo dnf install {pkg}")
 }

@@ -27,13 +27,21 @@ pub fn set_config_dir(dir: PathBuf) {
 ///
 /// All utility functions (`get_profiles_dir`, `get_openvpn_auth_path`, etc.)
 /// go through this, so the `--config-dir` flag is respected everywhere.
+///
+/// Resolution order: `set_config_dir()` > `VORTIX_CONFIG_DIR` env var > default.
+/// The env var override is primarily useful for test isolation.
 pub fn get_config_dir() -> std::io::Result<PathBuf> {
     if let Some(dir) = CONFIG_DIR.get() {
-        Ok(dir.clone())
-    } else {
-        // Fallback for early calls before set_config_dir (e.g. tests)
-        resolve_config_dir(None)
+        return Ok(dir.clone());
     }
+    if let Ok(dir) = std::env::var("VORTIX_CONFIG_DIR") {
+        let path = PathBuf::from(dir);
+        if !path.exists() {
+            std::fs::create_dir_all(&path)?;
+        }
+        return Ok(path);
+    }
+    resolve_config_dir(None)
 }
 
 /// User-configurable application settings.
@@ -73,6 +81,16 @@ pub struct AppConfig {
     pub disconnect_timeout: u64,
     /// `OpenVPN` daemon verbosity level (`--verb`). Range 0–11 (default: 3).
     pub openvpn_verbosity: String,
+    /// Maximum number of automatic retry attempts on connection failure (0 = disabled).
+    pub connect_max_retries: u32,
+    /// Base delay in seconds for exponential backoff between retries.
+    /// Actual delay = base × 2^(attempt−1), i.e. 2s, 4s, 8s for base=2.
+    pub connect_retry_base_delay_secs: u64,
+    /// Automatically reconnect to the last VPN when the connection drops unexpectedly.
+    pub auto_reconnect: bool,
+    /// Seconds to wait after detecting a network change before auto-reconnecting.
+    /// Gives the new network time to stabilize.
+    pub auto_reconnect_delay_secs: u64,
 }
 
 impl Default for AppConfig {
@@ -105,6 +123,10 @@ impl Default for AppConfig {
             log_retention_days: constants::DEFAULT_LOG_RETENTION_DAYS,
             disconnect_timeout: constants::DEFAULT_DISCONNECT_TIMEOUT,
             openvpn_verbosity: constants::DEFAULT_OVPN_VERBOSITY.to_string(),
+            connect_max_retries: constants::DEFAULT_CONNECT_MAX_RETRIES,
+            connect_retry_base_delay_secs: constants::DEFAULT_CONNECT_RETRY_BASE_DELAY_SECS,
+            auto_reconnect: constants::DEFAULT_AUTO_RECONNECT,
+            auto_reconnect_delay_secs: constants::DEFAULT_AUTO_RECONNECT_DELAY_SECS,
         }
     }
 }

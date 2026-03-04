@@ -1,37 +1,9 @@
-//! # Vortix VPN Manager
-//!
-//! Terminal UI for `WireGuard` and `OpenVPN` with real-time telemetry and leak guarding.
-//! It provides profile management and an intuitive dashboard interface.
-//!
-//! ## Modules
-//! - [`app`]: Core application state and logic.
-//! - [`cli`]: Command-line argument parsing.
-//! - [`config`]: Configuration management.
-//! - [`core`]: Scanner and telemetry background workers.
-//! - [`event`]: Event loop handling.
-//! - [`ui`]: TUI rendering and widget definitions.
-//! - [`vpn`]: Profile parsing and configuration management.
-
-mod app;
-mod cli;
-mod config;
-mod constants;
-mod core;
-mod event;
-mod logger;
-mod message;
-mod platform;
-mod state;
-mod theme;
-mod ui;
-mod utils;
-mod vpn;
-
-use app::App;
 use clap::Parser;
 use cli::args::Args;
 use color_eyre::Result;
 use event::{Event, EventHandler};
+use vortix::app::App;
+use vortix::{cli, config, event, ui};
 
 fn main() -> Result<()> {
     // Initialize error handling

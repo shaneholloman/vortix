@@ -15,6 +15,7 @@ pub struct PfFirewall;
 
 impl PfFirewall {
     /// Generate pf rules that block all traffic except VPN.
+    #[must_use]
     pub fn generate_pf_rules(vpn_interface: &str, vpn_server_ip: Option<&str>) -> String {
         let mut rules = format!(
             r"# Vortix Kill Switch Rules - Auto-generated

@@ -9,16 +9,15 @@ use ratatui::{
     Frame,
 };
 
-/// Render toast notification
+/// Render toast notification (anchored to top-right corner)
 pub fn render(frame: &mut Frame, app: &App) {
     if let Some(ref toast) = app.toast {
-        // Position at bottom center
         let area = frame.area();
-        // Create a "big rectangle" - narrow width, more height
-        let width = (area.width / 3).clamp(30, 60);
+        let width = (area.width / 3)
+            .clamp(28, 50)
+            .min(area.width.saturating_sub(2));
 
-        // Calculate dynamic height based on text length + vertical padding
-        let inner_width = width.saturating_sub(4) as usize; // More horizontal padding
+        let inner_width = width.saturating_sub(4) as usize;
         let text_len = toast.message.len();
         #[allow(
             clippy::cast_possible_truncation,
@@ -31,17 +30,15 @@ pub fn render(frame: &mut Frame, app: &App) {
             1
         };
 
-        // Ensure it's vertically longer (min height + padding)
-        let height = (text_lines + 4).max(7); // +4 for padding, min 7 rows
+        let height = (text_lines + 4).max(5);
 
         let toast_area = Rect {
-            x: (area.width / 2).saturating_sub(width / 2), // True center X
-            y: (area.height / 2).saturating_sub(height / 2), // True center Y
+            x: area.width.saturating_sub(width + 1),
+            y: 1,
             width,
             height,
         };
 
-        // Clear the background
         frame.render_widget(Clear, toast_area);
 
         let (title, bg_color, border_color) = match toast.toast_type {
@@ -49,22 +46,22 @@ pub fn render(frame: &mut Frame, app: &App) {
                 " INFO ",
                 Color::Rgb(136, 192, 208),
                 Color::Rgb(136, 192, 208),
-            ), // Frost Blue
+            ),
             crate::state::ToastType::Success => (
                 " SUCCESS ",
                 Color::Rgb(163, 190, 140),
                 Color::Rgb(163, 190, 140),
-            ), // Aurora Green
+            ),
             crate::state::ToastType::Warning => (
                 " WARNING ",
                 Color::Rgb(235, 203, 139),
                 Color::Rgb(235, 203, 139),
-            ), // Aurora Yellow
+            ),
             crate::state::ToastType::Error => (
                 " ERROR ",
                 Color::Rgb(191, 97, 106),
                 Color::Rgb(191, 97, 106),
-            ), // Aurora Red
+            ),
         };
 
         let block = Block::default()
@@ -76,9 +73,12 @@ pub fn render(frame: &mut Frame, app: &App) {
                     .fg(Color::Black)
                     .bg(bg_color)
                     .add_modifier(Modifier::BOLD),
+            ))
+            .title_bottom(Span::styled(
+                " Esc dismiss ",
+                Style::default().fg(Color::DarkGray),
             ));
 
-        // Create a vertical layout inside the toast to center the text
         let inner_area = block.inner(toast_area);
         frame.render_widget(block, toast_area);
 

@@ -9,6 +9,7 @@ pub enum ImportTarget {
 }
 
 /// Helper to expand paths with ~ to standard `PathBuf`
+#[must_use]
 pub fn expand_home(path_str: &str) -> PathBuf {
     if let Some(stripped) = path_str.strip_prefix("~/") {
         if let Some(home) = crate::utils::home_dir() {

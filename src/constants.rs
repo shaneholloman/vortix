@@ -33,6 +33,16 @@ pub const DEFAULT_CONNECT_TIMEOUT: u64 = 20;
 pub const CMD_TIMEOUT_SECS: u64 = 5;
 /// Default maximum seconds to wait for a VPN disconnect before force-killing.
 pub const DEFAULT_DISCONNECT_TIMEOUT: u64 = 30;
+/// Default maximum connection retry attempts on failure (0 = disabled).
+pub const DEFAULT_CONNECT_MAX_RETRIES: u32 = 3;
+/// Default base delay (seconds) for exponential backoff: delay = base * 2^(attempt-1).
+pub const DEFAULT_CONNECT_RETRY_BASE_DELAY_SECS: u64 = 2;
+/// Whether to automatically reconnect after unexpected VPN drops (default: true).
+pub const DEFAULT_AUTO_RECONNECT: bool = true;
+/// Default delay (seconds) before auto-reconnecting after a network change.
+pub const DEFAULT_AUTO_RECONNECT_DELAY_SECS: u64 = 3;
+/// Network monitor gateway check interval in seconds.
+pub const NETWORK_MONITOR_POLL_SECS: u64 = 3;
 
 // === Telemetry API Endpoint Defaults ===
 // Same principle: single source of truth, overridable via config.toml.
