@@ -16,5 +16,9 @@ publish = true
 
 [[package]]
 name = "vortix"
-# Use conventional commits to determine version bump
-semver_check = true
+# cargo-semver-checks only works with library crates; vortix is a binary.
+# Version bumps are determined by conventional commits automatically:
+#   fix: -> patch (0.1.5 -> 0.1.6)
+#   feat: -> patch while pre-1.0 (0.1.6 -> 0.1.7)
+#   feat!: / BREAKING CHANGE -> minor while pre-1.0 (0.1.7 -> 0.2.0)
+semver_check = false
