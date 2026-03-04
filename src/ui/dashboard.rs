@@ -542,6 +542,12 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
                     Protocol::OpenVPN => "OVPN",
                 });
 
+            let proto_suffix = if proto_tag.is_empty() {
+                ")".to_string()
+            } else {
+                format!("/{proto_tag})")
+            };
+
             let mut header_spans = vec![
                 Span::styled(
                     status_text,
@@ -551,10 +557,7 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
                     format!(" ({profile_name}"),
                     Style::default().fg(theme::TEXT_SECONDARY),
                 ),
-                Span::styled(
-                    format!("/{proto_tag})"),
-                    Style::default().fg(theme::NORD_FROST_2),
-                ),
+                Span::styled(proto_suffix, Style::default().fg(theme::NORD_FROST_2)),
                 Span::styled(" │ ", Style::default().fg(theme::NORD_POLAR_NIGHT_4)),
                 Span::styled("VPN: ", Style::default().fg(theme::TEXT_SECONDARY)),
                 Span::styled(&app.public_ip, Style::default().fg(theme::SUCCESS)),
@@ -808,7 +811,7 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
         [
             Constraint::Length(2),  // Status column (● or space)
             Constraint::Min(8),     // Profile name (flexible)
-            Constraint::Length(3),  // Protocol (W/O)
+            Constraint::Length(4),  // Protocol (WG/OV)
             Constraint::Length(10), // Last used time
         ],
     );
@@ -1150,10 +1153,11 @@ fn render_security_guard(frame: &mut Frame, app: &App, area: Rect) {
     }
     if let Some(real_dns) = &app.real_dns {
         if dns_leaking {
+            let real_dns_display = format!("{real_dns} (same!)");
             audit.push(Line::from(vec![
                 Span::styled("  Pre-VPN : ", Style::default().fg(theme::TEXT_SECONDARY)),
                 Span::styled(
-                    format!("{real_dns} (same!)"),
+                    utils::truncate(&real_dns_display, max_val),
                     Style::default().fg(theme::ERROR),
                 ),
             ]));
