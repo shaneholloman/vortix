@@ -498,6 +498,7 @@ impl App {
     /// and drain `pending_connect` (auto-connect to the queued profile, if any).
     pub(crate) fn complete_disconnect(&mut self, profile_name: &str) {
         self.session_start = None;
+        self.scanner_rx = None; // discard stale scanner data pre-disconnect
 
         // Clean up OpenVPN runtime files if this was an OpenVPN profile
         if self
@@ -534,6 +535,10 @@ impl App {
         self.retry_count = 0;
         self.retry_profile_idx = None;
         self.auto_reconnect_profile = None;
+        // Discard any in-flight scanner result captured before this disconnect;
+        // stale data showing the interface "up" would otherwise re-promote to
+        // Connected and trigger a spurious "VPN dropped" auto-reconnect.
+        self.scanner_rx = None;
         // Extract connection info from Connected or Connecting state
         let connection_info = match &self.connection_state {
             ConnectionState::Connected {
@@ -655,6 +660,8 @@ impl App {
             } else {
                 return;
             };
+
+        self.scanner_rx = None; // discard stale scanner data
 
         let force_info = self
             .profiles
