@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-/// Render toast notification (anchored to bottom-right corner)
+/// Render toast notification (anchored to top-right corner)
 pub fn render(frame: &mut Frame, app: &App) {
     if let Some(ref toast) = app.toast {
         let area = frame.area();
@@ -34,7 +34,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
         let toast_area = Rect {
             x: area.width.saturating_sub(width + 1),
-            y: area.height.saturating_sub(height + 2),
+            y: 1,
             width,
             height,
         };
