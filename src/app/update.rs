@@ -60,6 +60,14 @@ impl App {
                     self.confirm_delete(index);
                 }
             }
+            Message::ConfirmSwitch { idx } => {
+                self.input_mode = InputMode::Normal;
+                self.pending_connect = Some(idx);
+                if let Some(profile) = self.profiles.get(idx) {
+                    self.log(&format!("ACTION: Switching to '{}'...", profile.name));
+                }
+                self.disconnect();
+            }
             Message::ProfileMove(mv) => match mv {
                 SelectionMove::Next => self.profile_next(),
                 SelectionMove::Prev => self.profile_previous(),
