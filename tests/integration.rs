@@ -19,17 +19,7 @@ use vortix::state::{KillSwitchMode, KillSwitchState};
 // ============================================================================
 
 fn test_app() -> App {
-    let mut app = App::default();
-    // Reset state inherited from App::new() (which loads real profiles,
-    // persisted killswitch state, etc.) to create a clean test environment.
-    app.profiles.clear();
-    app.profile_list_state.select(None);
-    app.killswitch_mode = KillSwitchMode::Off;
-    app.killswitch_state = KillSwitchState::Disabled;
-    app.connection_state = ConnectionState::Disconnected;
-    app.session_start = None;
-    app.toast = None;
-    app
+    App::new_test()
 }
 
 fn add_wg_profiles(app: &mut App, names: &[&str]) {

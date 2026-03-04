@@ -335,6 +335,75 @@ impl App {
     }
 }
 
+impl App {
+    /// Lightweight constructor for testing: creates channels but spawns no
+    /// background threads (telemetry, scanner, network monitor).
+    #[must_use]
+    pub fn new_test() -> Self {
+        let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
+        let history_size = constants::NETWORK_HISTORY_SIZE;
+        #[allow(clippy::cast_precision_loss)]
+        let down_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
+        #[allow(clippy::cast_precision_loss)]
+        let up_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
+        Self {
+            should_quit: false,
+            connection_state: ConnectionState::Disconnected,
+            profiles: Vec::new(),
+            session_start: None,
+            down_history,
+            up_history,
+            current_down: 0,
+            current_up: 0,
+            latency_ms: 0,
+            packet_loss: 0.0,
+            jitter_ms: 0,
+            location: String::new(),
+            isp: String::new(),
+            dns_server: String::new(),
+            ipv6_leak: false,
+            public_ip: String::new(),
+            real_ip: None,
+            real_dns: None,
+            last_security_check: None,
+            last_connected_profile: None,
+            logs_scroll: 0,
+            logs_auto_scroll: true,
+            focused_panel: FocusedPanel::Sidebar,
+            zoomed_panel: None,
+            input_mode: InputMode::Normal,
+            show_config: false,
+            show_action_menu: false,
+            show_bulk_menu: false,
+            action_menu_state: ratatui::widgets::ListState::default(),
+            config_scroll: 0,
+            profile_list_state: TableState::default(),
+            panel_areas: HashMap::new(),
+            toast: None,
+            terminal_size: (80, 24),
+            is_root: false,
+            config: crate::config::AppConfig::default(),
+            config_dir: std::env::temp_dir().join("vortix_test"),
+            connection_drops: 0,
+            pending_connect: None,
+            killswitch_mode: crate::state::KillSwitchMode::Off,
+            killswitch_state: crate::state::KillSwitchState::Disabled,
+            retry_count: 0,
+            retry_profile_idx: None,
+            auto_reconnect_profile: None,
+            telemetry_rx: None,
+            telemetry_nudge: None,
+            cmd_tx,
+            cmd_rx,
+            scanner_rx: None,
+            netmon_rx: None,
+            netstats_rx: None,
+            last_bytes_in: 0,
+            last_bytes_out: 0,
+        }
+    }
+}
+
 impl Default for App {
     fn default() -> Self {
         Self::new(
