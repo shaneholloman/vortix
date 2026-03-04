@@ -858,7 +858,7 @@ mod tests {
     // === OpenVPN auth file write/read tests ===
 
     #[test]
-    #[ignore]
+    #[ignore = "requires root privileges for auth file permissions"]
     fn test_write_read_openvpn_auth_file() {
         let name = "test_auth_roundtrip";
         // Write
@@ -881,7 +881,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[ignore]
+    #[ignore = "requires root privileges for auth file permissions"]
     fn test_auth_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -903,7 +903,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires root privileges for auth file permissions"]
     fn test_read_openvpn_saved_auth_empty_creds() {
         let name = "test_auth_empty_creds";
         // Write empty username

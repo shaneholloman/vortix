@@ -699,7 +699,7 @@ fn test_auth_prompt_shown_for_openvpn_with_auth_user_pass() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_prompt_skipped_when_creds_saved() {
     let mut app = test_app();
     add_openvpn_profiles_with_auth(&mut app, &["saved-vpn"]);
@@ -754,7 +754,7 @@ fn test_auth_prompt_skipped_for_openvpn_without_auth_directive() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_submit_triggers_connect() {
     let mut app = test_app();
     add_openvpn_profiles_with_auth(&mut app, &["submit-vpn"]);
@@ -847,7 +847,7 @@ fn test_auth_field_switching() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_delete_profile_cleans_auth_file() {
     let mut app = test_app();
     add_openvpn_profiles_with_auth(&mut app, &["del-vpn"]);
@@ -988,7 +988,9 @@ fn test_connection_timeout_shows_error_toast() {
     let mut app = test_app();
     add_profiles(&mut app, &["timeout-vpn"]);
     app.connection_state = ConnectionState::Connecting {
-        started: Instant::now() - std::time::Duration::from_secs(60),
+        started: Instant::now()
+            .checked_sub(std::time::Duration::from_secs(60))
+            .unwrap(),
         profile: "timeout-vpn".to_string(),
     };
 

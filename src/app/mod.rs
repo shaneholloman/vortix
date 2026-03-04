@@ -4,12 +4,12 @@
 //! including VPN connection status, profile management, telemetry data, and UI state.
 //!
 //! ## Module structure
-//! - [`input`] — Keyboard and mouse event handling
-//! - [`update`] — Message dispatching (TEA-style update function)
-//! - [`connection`] — VPN connection lifecycle management
-//! - [`profile`] — Profile CRUD and import operations
-//! - [`telemetry_poll`] — Background telemetry and scanner polling
-//! - [`helpers`] — Logging, scrolling, toast notifications, and utilities
+//! - `input` — Keyboard and mouse event handling
+//! - `update` — Message dispatching (TEA-style update function)
+//! - `connection` — VPN connection lifecycle management
+//! - `profile` — Profile CRUD and import operations
+//! - `telemetry_poll` — Background telemetry and scanner polling
+//! - `helpers` — Logging, scrolling, toast notifications, and utilities
 
 mod connection;
 mod helpers;
