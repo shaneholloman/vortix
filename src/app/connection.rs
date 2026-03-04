@@ -500,6 +500,18 @@ impl App {
         self.session_start = None;
         self.scanner_rx = None; // discard stale scanner data pre-disconnect
 
+        self.public_ip = crate::constants::MSG_DETECTING.to_string();
+        self.location = crate::constants::MSG_DETECTING.to_string();
+        self.isp = crate::constants::MSG_DETECTING.to_string();
+        self.dns_server = crate::constants::MSG_DETECTING.to_string();
+        self.ipv6_leak = false;
+        self.latency_ms = 0;
+        self.packet_loss = 0.0;
+        self.jitter_ms = 0;
+        self.last_security_check = None;
+        self.current_down = 0;
+        self.current_up = 0;
+
         // Clean up OpenVPN runtime files if this was an OpenVPN profile
         if self
             .profiles
