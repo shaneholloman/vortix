@@ -74,6 +74,8 @@ pub enum Message {
     OpenDelete(Option<usize>),
     /// Confirm deletion
     ConfirmDelete,
+    /// Confirm VPN profile switch
+    ConfirmSwitch { idx: usize },
 
     // === Action Menu ===
     /// Open the action menu (Single actions)

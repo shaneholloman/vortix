@@ -38,22 +38,20 @@ impl App {
                     }
                     self.pending_connect = Some(idx);
                 }
-                // If connected...
                 ConnectionState::Connected {
                     profile: current_name,
                     ..
                 } => {
                     if *current_name == target_name {
-                        // Same profile -> Disconnect (toggle off)
                         self.pending_connect = None;
                         self.disconnect();
                     } else {
-                        // Different profile -> Queue switch: disconnect first, connect after
-                        self.pending_connect = Some(idx);
-                        self.log(&format!(
-                            "ACTION: Switching from '{current_name}' to '{target_name}'..."
-                        ));
-                        self.disconnect();
+                        self.input_mode = InputMode::ConfirmSwitch {
+                            from: current_name.clone(),
+                            to_idx: idx,
+                            to_name: target_name,
+                            confirm_selected: true,
+                        };
                     }
                 }
                 // If disconnected -> Connect immediately

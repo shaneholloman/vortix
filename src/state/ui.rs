@@ -88,6 +88,13 @@ pub enum InputMode {
         /// Cursor position in the query.
         cursor: usize,
     },
+    /// Confirmation dialog for switching VPN profile while connected.
+    ConfirmSwitch {
+        from: String,
+        to_idx: usize,
+        to_name: String,
+        confirm_selected: bool,
+    },
     /// `OpenVPN` authentication credentials dialog.
     AuthPrompt {
         /// Index of the profile requiring auth.

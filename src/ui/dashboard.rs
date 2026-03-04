@@ -157,6 +157,14 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
         InputMode::Search { query, cursor } => {
             render_search_bar(frame, app, query, *cursor, app.profiles.len());
         }
+        InputMode::ConfirmSwitch {
+            from,
+            to_name,
+            confirm_selected,
+            ..
+        } => {
+            render_confirm_switch(frame, from, to_name, *confirm_selected);
+        }
         InputMode::Normal => {}
     }
 
@@ -1991,4 +1999,75 @@ fn render_search_bar(frame: &mut Frame, app: &App, query: &str, cursor: usize, t
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), inner);
+}
+
+fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool) {
+    let area = frame.area();
+    let width = 50u16.min(area.width.saturating_sub(4));
+    let height = 7u16;
+    let overlay = Rect {
+        x: (area.width / 2).saturating_sub(width / 2),
+        y: (area.height / 2).saturating_sub(height / 2),
+        width,
+        height,
+    };
+
+    frame.render_widget(Clear, overlay);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::WARNING))
+        .title(Span::styled(
+            " Switch Profile ",
+            Style::default()
+                .fg(theme::WARNING)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner = block.inner(overlay);
+    frame.render_widget(block, overlay);
+
+    let yes_style = if confirm {
+        Style::default()
+            .fg(Color::Black)
+            .bg(theme::WARNING)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    };
+    let no_style = if confirm {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    } else {
+        Style::default()
+            .fg(Color::Black)
+            .bg(theme::ACCENT_PRIMARY)
+            .add_modifier(Modifier::BOLD)
+    };
+
+    let text = vec![
+        Line::from(vec![
+            Span::styled(
+                "Disconnect from ",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            ),
+            Span::styled(from, Style::default().fg(theme::ACCENT_PRIMARY)),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "and connect to ",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            ),
+            Span::styled(to, Style::default().fg(theme::SUCCESS)),
+            Span::styled("?", Style::default().fg(theme::TEXT_SECONDARY)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("     ", Style::default()),
+            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
+            Span::styled("  ", Style::default()),
+            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(text), inner);
 }

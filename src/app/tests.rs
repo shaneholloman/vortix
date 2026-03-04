@@ -320,17 +320,24 @@ fn add_profiles(app: &mut App, names: &[&str]) {
 // ====================================================================
 
 #[test]
-fn test_toggle_connected_different_profile_sets_pending() {
+fn test_toggle_connected_different_profile_shows_confirm() {
     let mut app = test_app();
     add_profiles(&mut app, &["vpn-a", "vpn-b"]);
     set_connected(&mut app, "vpn-a");
 
     app.toggle_connection(1);
 
+    assert!(
+        matches!(app.input_mode, InputMode::ConfirmSwitch { to_idx: 1, .. }),
+        "Expected ConfirmSwitch dialog, got {:?}",
+        app.input_mode
+    );
+
+    app.handle_message(Message::ConfirmSwitch { idx: 1 });
     assert_eq!(app.pending_connect, Some(1));
     assert!(
         matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
-        "Expected Disconnecting after switch request, got {:?}",
+        "Expected Disconnecting after confirm, got {:?}",
         app.connection_state
     );
 }
@@ -602,18 +609,18 @@ fn test_reconnect_auto_connects_after_disconnect_completes() {
 // ====================================================================
 
 #[test]
-fn test_quick_connect_while_connected_switches_vpn() {
+fn test_quick_connect_while_connected_shows_confirm() {
     let mut app = test_app();
     add_profiles(&mut app, &["vpn-a", "vpn-b", "vpn-c"]);
     set_connected(&mut app, "vpn-a");
 
     app.handle_message(Message::QuickConnect(1));
 
-    assert_eq!(app.pending_connect, Some(1));
-    assert!(matches!(
-        app.connection_state,
-        ConnectionState::Disconnecting { .. }
-    ));
+    assert!(
+        matches!(app.input_mode, InputMode::ConfirmSwitch { to_idx: 1, .. }),
+        "Expected ConfirmSwitch dialog for QuickConnect, got {:?}",
+        app.input_mode,
+    );
 }
 
 #[test]
@@ -1198,4 +1205,29 @@ fn test_search_match_count_updated() {
 
     app.apply_search_filter("");
     assert_eq!(app.search_match_count, 3, "Empty query should match all");
+}
+
+#[test]
+fn test_confirm_switch_when_already_disconnected_connects_directly() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a", "vpn-b"]);
+    app.profile_list_state.select(Some(0));
+    app.is_root = true;
+
+    assert!(matches!(
+        app.connection_state,
+        ConnectionState::Disconnected
+    ));
+
+    app.handle_message(Message::ConfirmSwitch { idx: 1 });
+
+    assert!(
+        app.pending_connect.is_none(),
+        "Should not set pending_connect when already disconnected"
+    );
+    assert!(
+        matches!(app.connection_state, ConnectionState::Connecting { ref profile, .. } if profile == "vpn-b"),
+        "Should connect directly when already disconnected, got {:?}",
+        app.connection_state
+    );
 }

@@ -155,6 +155,7 @@ impl App {
                 }
             }
             InputMode::ConfirmDelete { .. } => self.handle_confirm_delete_keys(key),
+            InputMode::ConfirmSwitch { .. } => self.handle_confirm_switch_keys(key),
             InputMode::Normal => self.handle_normal_keys(key),
         }
     }
@@ -226,6 +227,42 @@ impl App {
                 KeyCode::Enter => {
                     if *confirm_selected {
                         self.handle_message(Message::ConfirmDelete);
+                    } else {
+                        self.handle_message(Message::CloseOverlay);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_confirm_switch_keys(&mut self, key: KeyEvent) {
+        if let InputMode::ConfirmSwitch {
+            to_idx,
+            confirm_selected,
+            ..
+        } = &mut self.input_mode
+        {
+            let idx = *to_idx;
+            match key.code {
+                KeyCode::Tab => {
+                    *confirm_selected = !*confirm_selected;
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    *confirm_selected = true;
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    *confirm_selected = false;
+                }
+                KeyCode::Char('y') => {
+                    self.handle_message(Message::ConfirmSwitch { idx });
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.handle_message(Message::CloseOverlay);
+                }
+                KeyCode::Enter => {
+                    if *confirm_selected {
+                        self.handle_message(Message::ConfirmSwitch { idx });
                     } else {
                         self.handle_message(Message::CloseOverlay);
                     }
