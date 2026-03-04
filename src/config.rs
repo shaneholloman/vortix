@@ -27,13 +27,21 @@ pub fn set_config_dir(dir: PathBuf) {
 ///
 /// All utility functions (`get_profiles_dir`, `get_openvpn_auth_path`, etc.)
 /// go through this, so the `--config-dir` flag is respected everywhere.
+///
+/// Resolution order: `set_config_dir()` > `VORTIX_CONFIG_DIR` env var > default.
+/// The env var override is primarily useful for test isolation.
 pub fn get_config_dir() -> std::io::Result<PathBuf> {
     if let Some(dir) = CONFIG_DIR.get() {
-        Ok(dir.clone())
-    } else {
-        // Fallback for early calls before set_config_dir (e.g. tests)
-        resolve_config_dir(None)
+        return Ok(dir.clone());
     }
+    if let Ok(dir) = std::env::var("VORTIX_CONFIG_DIR") {
+        let path = PathBuf::from(dir);
+        if !path.exists() {
+            std::fs::create_dir_all(&path)?;
+        }
+        return Ok(path);
+    }
+    resolve_config_dir(None)
 }
 
 /// User-configurable application settings.

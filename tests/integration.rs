@@ -1,9 +1,12 @@
 //! Integration tests for Vortix core functionality.
 //!
-//! These tests construct an `App` instance via `App::default()` and drive it
-//! through scenarios without requiring actual VPN tools, root privileges, or
-//! network access.
+//! These tests construct a lightweight `App` instance and drive it through
+//! scenarios without requiring actual VPN tools, root privileges, or network
+//! access.  All filesystem operations are redirected to a temporary directory
+//! via the `VORTIX_CONFIG_DIR` environment variable so that tests never touch
+//! the user's real `~/.config/vortix/`.
 
+use std::sync::Once;
 use std::time::Instant;
 
 use vortix::app::{
@@ -14,11 +17,23 @@ use vortix::core::scanner::ActiveSession;
 use vortix::message::{Message, ScrollMove, SelectionMove};
 use vortix::state::{KillSwitchMode, KillSwitchState};
 
+static INIT: Once = Once::new();
+
+fn init_test_env() {
+    INIT.call_once(|| {
+        let test_config =
+            std::env::temp_dir().join(format!("vortix_integration_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&test_config);
+        std::env::set_var("VORTIX_CONFIG_DIR", &test_config);
+    });
+}
+
 // ============================================================================
 // Test helpers
 // ============================================================================
 
 fn test_app() -> App {
+    init_test_env();
     App::new_test()
 }
 

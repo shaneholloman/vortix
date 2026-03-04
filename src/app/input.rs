@@ -161,11 +161,30 @@ impl App {
 
     pub fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
         use crossterm::event::{MouseButton, MouseEventKind};
+
+        // When an overlay is active, only route scroll to the overlay — don't
+        // let mouse events pass through to panels behind it.
+        if self.input_mode != InputMode::Normal {
+            match (&mut self.input_mode, mouse.kind) {
+                (InputMode::Help { scroll }, MouseEventKind::ScrollDown) => {
+                    *scroll = scroll.saturating_add(3);
+                }
+                (InputMode::Help { scroll }, MouseEventKind::ScrollUp) => {
+                    *scroll = scroll.saturating_sub(3);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        if self.show_config || self.show_action_menu || self.show_bulk_menu {
+            return;
+        }
+
         match mouse.kind {
             MouseEventKind::ScrollDown => self.handle_message(Message::Scroll(ScrollMove::Down)),
             MouseEventKind::ScrollUp => self.handle_message(Message::Scroll(ScrollMove::Up)),
             MouseEventKind::Down(MouseButton::Left) => {
-                // Check if any panel was clicked
                 for (panel, area) in &self.panel_areas {
                     if mouse.column >= area.x
                         && mouse.column < area.x + area.width

@@ -3,8 +3,20 @@ use crate::core::scanner::ActiveSession;
 use std::sync::mpsc;
 use std::time::Instant;
 
+fn init_test_env() {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let test_config =
+            std::env::temp_dir().join(format!("vortix_unit_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&test_config);
+        std::env::set_var("VORTIX_CONFIG_DIR", &test_config);
+    });
+}
+
 /// Build a minimal `App` for unit testing (no filesystem / scanner / telemetry).
 fn test_app() -> App {
+    init_test_env();
     let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
     App {
         should_quit: false,
