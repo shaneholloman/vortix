@@ -1067,8 +1067,8 @@ fn test_help_mode_opens_and_closes() {
     let mut app = test_app();
     assert!(matches!(app.input_mode, InputMode::Normal));
 
-    app.input_mode = InputMode::Help;
-    assert!(matches!(app.input_mode, InputMode::Help));
+    app.input_mode = InputMode::Help { scroll: 0 };
+    assert!(matches!(app.input_mode, InputMode::Help { .. }));
 
     app.handle_message(Message::CloseOverlay);
     assert!(matches!(app.input_mode, InputMode::Normal));

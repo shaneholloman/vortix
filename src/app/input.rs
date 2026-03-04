@@ -108,9 +108,27 @@ impl App {
                     self.handle_message(Message::CloseOverlay);
                 }
             }
-            InputMode::Help => {
-                if matches!(key.code, KeyCode::Esc | KeyCode::Char('?' | 'q')) {
-                    self.handle_message(Message::CloseOverlay);
+            InputMode::Help { mut scroll } => {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('?' | 'q') => {
+                        self.handle_message(Message::CloseOverlay);
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        scroll = scroll.saturating_add(1);
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        scroll = scroll.saturating_sub(1);
+                    }
+                    KeyCode::Char('g') | KeyCode::Home => {
+                        scroll = 0;
+                    }
+                    KeyCode::Char('G') | KeyCode::End => {
+                        scroll = u16::MAX;
+                    }
+                    _ => {}
+                }
+                if let InputMode::Help { .. } = self.input_mode {
+                    self.input_mode = InputMode::Help { scroll };
                 }
             }
             InputMode::Rename {
@@ -401,7 +419,7 @@ impl App {
 
             KeyCode::Char('K') => self.handle_message(Message::ToggleKillSwitch),
             KeyCode::Char('?') => {
-                self.input_mode = InputMode::Help;
+                self.input_mode = InputMode::Help { scroll: 0 };
             }
             KeyCode::Char('/') => {
                 self.input_mode = InputMode::Search {

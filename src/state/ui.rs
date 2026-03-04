@@ -68,7 +68,10 @@ pub enum InputMode {
         confirm_selected: bool,
     },
     /// Help overlay showing all keybindings.
-    Help,
+    Help {
+        /// Vertical scroll offset.
+        scroll: u16,
+    },
     /// Profile rename dialog.
     Rename {
         /// Index of the profile being renamed.

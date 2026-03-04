@@ -134,8 +134,8 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
         } => {
             render_rename_overlay(frame, new_name, *cursor);
         }
-        InputMode::Help => {
-            super::overlays::help::render(frame);
+        InputMode::Help { scroll } => {
+            super::overlays::help::render(frame, *scroll);
         }
         InputMode::Search { query, cursor } => {
             render_search_bar(frame, query, *cursor, app.profiles.len());

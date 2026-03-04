@@ -37,6 +37,7 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
             ("G / End", "Last profile"),
             ("PgUp/PgDn", "Page up / down"),
             ("c / Enter", "Connect / disconnect"),
+            ("R", "Rename profile"),
             ("v", "View config"),
             ("a", "Manage auth (OpenVPN)"),
             ("A", "Clear saved auth"),
@@ -61,10 +62,14 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
     ),
 ];
 
-pub fn render(frame: &mut Frame) {
+pub fn render(frame: &mut Frame, scroll: u16) {
     let area = frame.area();
     let width = area.width.saturating_sub(4).min(65);
     let height = area.height.saturating_sub(2).min(38);
+    if width == 0 || height == 0 {
+        return;
+    }
+
     let overlay = Rect {
         x: (area.width / 2).saturating_sub(width / 2),
         y: (area.height / 2).saturating_sub(height / 2),
@@ -73,23 +78,6 @@ pub fn render(frame: &mut Frame) {
     };
 
     frame.render_widget(Clear, overlay);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::ACCENT_PRIMARY))
-        .title(Span::styled(
-            " Keybindings ",
-            Style::default()
-                .fg(theme::ACCENT_PRIMARY)
-                .add_modifier(Modifier::BOLD),
-        ))
-        .title_bottom(Span::styled(
-            " ? or Esc to close ",
-            Style::default().fg(theme::KEY_HINT_DESC),
-        ));
-
-    let inner = block.inner(overlay);
-    frame.render_widget(block, overlay);
 
     let mut lines: Vec<Line> = Vec::new();
 
@@ -118,6 +106,40 @@ pub fn render(frame: &mut Frame) {
         }
     }
 
-    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    #[allow(clippy::cast_possible_truncation)]
+    let total_lines = lines.len() as u16;
+    let inner_height = height.saturating_sub(2); // borders
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    let clamped_scroll = scroll.min(max_scroll);
+
+    let can_scroll_down = clamped_scroll < max_scroll;
+    let can_scroll_up = clamped_scroll > 0;
+    let scroll_hint = match (can_scroll_up, can_scroll_down) {
+        (true, true) => " ↑↓ scroll · ? close ",
+        (false, true) => " ↓ scroll · ? close ",
+        (true, false) => " ↑ scroll · ? close ",
+        (false, false) => " ? or Esc to close ",
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::ACCENT_PRIMARY))
+        .title(Span::styled(
+            " Keybindings ",
+            Style::default()
+                .fg(theme::ACCENT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ))
+        .title_bottom(Span::styled(
+            scroll_hint,
+            Style::default().fg(theme::KEY_HINT_DESC),
+        ));
+
+    let inner = block.inner(overlay);
+    frame.render_widget(block, overlay);
+
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .scroll((clamped_scroll, 0));
     frame.render_widget(paragraph, inner);
 }
