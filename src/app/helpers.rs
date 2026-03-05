@@ -1,8 +1,8 @@
 //! Logging, scrolling, toast notifications, and utility helpers.
 
 use std::path::Path;
-use time::OffsetDateTime;
 use std::time::Instant;
+use time::OffsetDateTime;
 
 use super::{App, FocusedPanel, Toast, ToastType, DISMISS_DURATION};
 use crate::constants;
