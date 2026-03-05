@@ -30,6 +30,9 @@ exclude = [
 ratatui = "0.30"
 crossterm = "0.29"
 
+# Date/time formatting (local-offset needed for OffsetDateTime::now_local)
+time = { version = "0.3", features = ["local-offset"] }
+
 # Error Handling
 color-eyre = "0.6"
 

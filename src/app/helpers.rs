@@ -1,6 +1,7 @@
 //! Logging, scrolling, toast notifications, and utility helpers.
 
 use std::path::Path;
+use time::OffsetDateTime;
 use std::time::Instant;
 
 use super::{App, FocusedPanel, Toast, ToastType, DISMISS_DURATION};
@@ -222,14 +223,10 @@ impl App {
             return;
         }
 
-        // Use date-based log file (get date from system)
-        let today = std::process::Command::new("date")
-            .arg("+%Y-%m-%d")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map_or_else(|| "unknown".to_string(), |s| s.trim().to_string());
-
+        // Use date-based log file
+        let today = OffsetDateTime::now_local()
+            .unwrap_or_else(|_| OffsetDateTime::now_utc())
+            .date();
         let log_file = log_dir.join(format!("vortix-{today}.log"));
 
         // Rotate if the file exceeds the configured size
