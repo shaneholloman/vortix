@@ -6,6 +6,19 @@ use vortix::app::App;
 use vortix::{cli, config, event, ui};
 
 fn main() -> Result<()> {
+    // Install a panic hook that restores the terminal before printing the backtrace.
+    // Drop glue on App will still run to release kill switch and VPN processes.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // Restore terminal so the panic message is legible
+        restore_terminal();
+        eprintln!();
+        eprintln!("Vortix crashed unexpectedly.");
+        eprintln!("If your network is broken, run:  vortix release-killswitch");
+        eprintln!();
+        default_hook(info);
+    }));
+
     // Initialize error handling
     color_eyre::install()?;
 

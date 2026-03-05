@@ -434,7 +434,19 @@ impl App {
             }
         };
 
-        // 2. Sync physical firewall state if target state changed or if forcing sync
+        // 2. Refuse Blocking state when not running as root — firewall rules
+        //    require elevated privileges and the UI must not claim a security
+        //    posture that isn't enforced.
+        if self.killswitch_state.is_blocking() && !self.is_root {
+            self.killswitch_state = KillSwitchState::Armed;
+            self.show_toast(
+                "Kill switch requires root — run with sudo".to_string(),
+                ToastType::Warning,
+            );
+            self.log("WARN: Kill switch blocked — not running as root");
+        }
+
+        // 3. Sync physical firewall state if target state changed or if forcing sync
         if self.killswitch_state != old_state || self.killswitch_state == KillSwitchState::Blocking
         {
             if self.killswitch_state.is_blocking() {
@@ -446,10 +458,8 @@ impl App {
                     _ => (crate::platform::DEFAULT_VPN_INTERFACE, None),
                 };
 
-                if self.is_root {
-                    if let Err(e) = crate::core::killswitch::enable_blocking(interface, server_ip) {
-                        self.log(&format!("WARN: Failed to enable kill switch: {e}"));
-                    }
+                if let Err(e) = crate::core::killswitch::enable_blocking(interface, server_ip) {
+                    self.log(&format!("WARN: Failed to enable kill switch: {e}"));
                 }
             } else if old_state.is_blocking() {
                 if let Err(e) = crate::core::killswitch::disable_blocking() {
@@ -458,7 +468,7 @@ impl App {
             }
         }
 
-        // 3. Persist state
+        // 4. Persist state
         let _ = crate::core::killswitch::save_state(
             self.killswitch_mode,
             self.killswitch_state,
@@ -622,8 +632,10 @@ impl App {
                                 .stderr(std::process::Stdio::piped())
                                 .output()
                         } else {
+                            // Target only the Vortix-managed daemon, not all openvpn processes.
+                            // connect_profile() spawns with `--daemon vortix-{name}`.
                             std::process::Command::new("pkill")
-                                .arg("openvpn")
+                                .args(["-f", &format!("openvpn.*--daemon vortix-{profile_name}")])
                                 .stdout(std::process::Stdio::piped())
                                 .stderr(std::process::Stdio::piped())
                                 .output()
@@ -716,7 +728,7 @@ impl App {
                                 .output()
                         } else {
                             std::process::Command::new("pkill")
-                                .args(["-9", "openvpn"])
+                                .args(["-9", "-f", &format!("openvpn.*--daemon vortix-{name}")])
                                 .stdout(std::process::Stdio::piped())
                                 .stderr(std::process::Stdio::piped())
                                 .output()

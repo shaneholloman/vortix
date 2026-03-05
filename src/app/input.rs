@@ -380,13 +380,18 @@ impl App {
     }
 
     /// Generic text field input handler for cursor movement and editing.
-    fn handle_text_field_input(key: KeyEvent, text: &mut String, cursor: &mut usize) {
+    ///
+    /// `cursor` tracks the **character position** (not byte offset) so that
+    /// multi-byte UTF-8 characters (é, ñ, 日本語, emoji) work correctly.
+    pub(super) fn handle_text_field_input(key: KeyEvent, text: &mut String, cursor: &mut usize) {
+        let char_count = text.chars().count();
+
         match key.code {
             KeyCode::Left => {
                 *cursor = cursor.saturating_sub(1);
             }
             KeyCode::Right => {
-                if *cursor < text.len() {
+                if *cursor < char_count {
                     *cursor += 1;
                 }
             }
@@ -394,21 +399,30 @@ impl App {
                 *cursor = 0;
             }
             KeyCode::End => {
-                *cursor = text.len();
+                *cursor = char_count;
             }
             KeyCode::Backspace => {
                 if *cursor > 0 {
-                    text.remove(*cursor - 1);
+                    let byte_idx = text.char_indices().nth(*cursor - 1).map_or(0, |(i, _)| i);
+                    text.remove(byte_idx);
                     *cursor -= 1;
                 }
             }
             KeyCode::Delete => {
-                if *cursor < text.len() {
-                    text.remove(*cursor);
+                if *cursor < char_count {
+                    let byte_idx = text
+                        .char_indices()
+                        .nth(*cursor)
+                        .map_or(text.len(), |(i, _)| i);
+                    text.remove(byte_idx);
                 }
             }
             KeyCode::Char(c) => {
-                text.insert(*cursor, c);
+                let byte_idx = text
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(text.len(), |(i, _)| i);
+                text.insert(byte_idx, c);
                 *cursor += 1;
             }
             _ => {}

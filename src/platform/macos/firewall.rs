@@ -80,13 +80,28 @@ impl Firewall for PfFirewall {
         }
 
         let rules = Self::generate_pf_rules(vpn_interface, vpn_server_ip);
+
+        let conf_path = std::path::Path::new(constants::PF_CONF_PATH);
+        if let Some(parent) = conf_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+                }
+            }
+        }
+
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .mode(0o600) // Root-only read/write — prevents symlink attacks
+            .mode(0o600)
             .open(constants::PF_CONF_PATH)?;
         file.write_all(rules.as_bytes())?;
+
+        let _ = fs::remove_file(constants::PF_CONF_PATH_LEGACY);
         logger::log(
             LogLevel::Debug,
             "FIREWALL",
@@ -154,6 +169,7 @@ impl Firewall for PfFirewall {
 
         let _ = Command::new("pfctl").args(["-d"]).output()?;
         let _ = fs::remove_file(constants::PF_CONF_PATH);
+        let _ = fs::remove_file(constants::PF_CONF_PATH_LEGACY);
 
         logger::log(
             LogLevel::Info,
