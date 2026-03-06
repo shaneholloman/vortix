@@ -304,11 +304,13 @@ impl App {
         } else {
             let err_msg = error.unwrap_or_else(|| "unknown error".to_string());
             self.log(&format!("ERR: Failed to disconnect '{profile}': {err_msg}"));
-            // Clear pending -- don't auto-connect after a failed disconnect
-            self.pending_connect = None;
-            self.connection_state = ConnectionState::Disconnected;
-            self.show_toast(format!("Failed to disconnect: {err_msg}"), ToastType::Error);
-            self.sync_killswitch();
+            // Keep Disconnecting state — the VPN process may still be running.
+            // The user can press 'd' again to force-disconnect (SIGKILL).
+            // Do NOT sync kill switch to a "disconnected" posture.
+            self.show_toast(
+                format!("Disconnect failed: {err_msg}. Press d to force-disconnect."),
+                ToastType::Error,
+            );
         }
     }
 
@@ -462,28 +464,36 @@ impl App {
         // Cycle to next mode
         self.killswitch_mode = self.killswitch_mode.next();
 
-        // Sync state and firewall
+        // Sync state and firewall (may refuse Blocking if not root)
         self.sync_killswitch();
 
-        // Log and toast based on new mode
-        match self.killswitch_mode {
-            KillSwitchMode::Off => {
-                self.log("SEC: Kill switch DISABLED");
-                self.show_toast("Kill Switch OFF".to_string(), ToastType::Info);
-            }
-            KillSwitchMode::Auto => {
-                self.log("SEC: Kill switch mode set to AUTO");
-                self.show_toast(
-                    "Kill Switch ON - will block if VPN drops".to_string(),
-                    ToastType::Success,
-                );
-            }
-            KillSwitchMode::AlwaysOn => {
-                self.log("SEC: Kill switch mode set to STRICT (AlwaysOn)");
-                self.show_toast(
-                    "Kill Switch STRICT - blocks until VPN connects".to_string(),
-                    ToastType::Warning,
-                );
+        // If sync_killswitch refused Blocking because we're not root (only
+        // possible in AlwaysOn mode when disconnected), preserve the root
+        // warning toast instead of overwriting it with the mode toast.
+        let blocking_refused = matches!(self.killswitch_mode, KillSwitchMode::AlwaysOn)
+            && !self.is_root
+            && !self.killswitch_state.is_blocking();
+
+        if !blocking_refused {
+            match self.killswitch_mode {
+                KillSwitchMode::Off => {
+                    self.log("SEC: Kill switch DISABLED");
+                    self.show_toast("Kill Switch OFF".to_string(), ToastType::Info);
+                }
+                KillSwitchMode::Auto => {
+                    self.log("SEC: Kill switch mode set to AUTO");
+                    self.show_toast(
+                        "Kill Switch ON - will block if VPN drops".to_string(),
+                        ToastType::Success,
+                    );
+                }
+                KillSwitchMode::AlwaysOn => {
+                    self.log("SEC: Kill switch mode set to STRICT (AlwaysOn)");
+                    self.show_toast(
+                        "Kill Switch STRICT - blocks until VPN connects".to_string(),
+                        ToastType::Warning,
+                    );
+                }
             }
         }
 

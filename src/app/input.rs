@@ -280,36 +280,7 @@ impl App {
                 self.handle_message(Message::Import(path_clone));
                 self.handle_message(Message::CloseOverlay);
             }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < path.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Home => {
-                *cursor = 0;
-            }
-            KeyCode::End => {
-                *cursor = path.len();
-            }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    path.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
-            }
-            KeyCode::Delete => {
-                if *cursor < path.len() {
-                    path.remove(*cursor);
-                }
-            }
-            KeyCode::Char(c) => {
-                path.insert(*cursor, c);
-                *cursor += 1;
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, path, cursor),
         }
     }
 
@@ -380,13 +351,18 @@ impl App {
     }
 
     /// Generic text field input handler for cursor movement and editing.
-    fn handle_text_field_input(key: KeyEvent, text: &mut String, cursor: &mut usize) {
+    ///
+    /// `cursor` tracks the **character position** (not byte offset) so that
+    /// multi-byte UTF-8 characters (é, ñ, 日本語, emoji) work correctly.
+    pub(super) fn handle_text_field_input(key: KeyEvent, text: &mut String, cursor: &mut usize) {
+        let char_count = text.chars().count();
+
         match key.code {
             KeyCode::Left => {
                 *cursor = cursor.saturating_sub(1);
             }
             KeyCode::Right => {
-                if *cursor < text.len() {
+                if *cursor < char_count {
                     *cursor += 1;
                 }
             }
@@ -394,21 +370,30 @@ impl App {
                 *cursor = 0;
             }
             KeyCode::End => {
-                *cursor = text.len();
+                *cursor = char_count;
             }
             KeyCode::Backspace => {
                 if *cursor > 0 {
-                    text.remove(*cursor - 1);
+                    let byte_idx = text.char_indices().nth(*cursor - 1).map_or(0, |(i, _)| i);
+                    text.remove(byte_idx);
                     *cursor -= 1;
                 }
             }
             KeyCode::Delete => {
-                if *cursor < text.len() {
-                    text.remove(*cursor);
+                if *cursor < char_count {
+                    let byte_idx = text
+                        .char_indices()
+                        .nth(*cursor)
+                        .map_or(text.len(), |(i, _)| i);
+                    text.remove(byte_idx);
                 }
             }
             KeyCode::Char(c) => {
-                text.insert(*cursor, c);
+                let byte_idx = text
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(text.len(), |(i, _)| i);
+                text.insert(byte_idx, c);
                 *cursor += 1;
             }
             _ => {}
@@ -546,11 +531,11 @@ impl App {
                                 );
                             } else {
                                 let name = profile.name.clone();
-                                let len = name.len();
+                                let char_len = name.chars().count();
                                 self.input_mode = InputMode::Rename {
                                     index: idx,
                                     new_name: name,
-                                    cursor: len,
+                                    cursor: char_len,
                                 };
                             }
                         }
@@ -710,25 +695,7 @@ impl App {
                 }
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    new_name.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
-            }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < new_name.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Char(c) => {
-                new_name.insert(*cursor, c);
-                *cursor += 1;
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, new_name, cursor),
         }
     }
 
@@ -737,27 +704,11 @@ impl App {
             KeyCode::Esc | KeyCode::Enter => {
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    query.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Char(_) => {
+                Self::handle_text_field_input(key, query, cursor);
                 self.apply_search_filter(query);
             }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < query.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Char(c) => {
-                query.insert(*cursor, c);
-                *cursor += 1;
-                self.apply_search_filter(query);
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, query, cursor),
         }
     }
 

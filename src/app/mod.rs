@@ -418,6 +418,35 @@ impl App {
     }
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        // Safety net: clean up firewall rules and VPN processes even on panic.
+        // Idempotent with handle_quit — if quit already ran, these are no-ops.
+        if self.killswitch_state.is_blocking() {
+            let _ = crate::core::killswitch::disable_blocking();
+        }
+        crate::core::killswitch::clear_state();
+
+        match &self.connection_state {
+            ConnectionState::Connected {
+                profile, details, ..
+            } => {
+                if let Some(pid) = details.pid {
+                    let _ = std::process::Command::new("kill")
+                        .arg(pid.to_string())
+                        .output();
+                }
+                self.cleanup_vpn_resources(profile);
+            }
+            ConnectionState::Connecting { profile, .. }
+            | ConnectionState::Disconnecting { profile, .. } => {
+                self.cleanup_vpn_resources(profile);
+            }
+            ConnectionState::Disconnected => {}
+        }
+    }
+}
+
 impl Default for App {
     fn default() -> Self {
         Self::new(

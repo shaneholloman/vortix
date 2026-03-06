@@ -84,9 +84,12 @@ pub const KILLSWITCH_STATE_FILE: &str = "killswitch.state";
 
 // === Platform-Specific Paths ===
 
-/// macOS pf configuration file path (temp file for kill switch rules).
+/// macOS pf configuration file path (privileged runtime dir, root-only).
 #[cfg(target_os = "macos")]
-pub const PF_CONF_PATH: &str = "/tmp/vortix_killswitch.conf";
+pub const PF_CONF_PATH: &str = "/var/run/vortix/killswitch.conf";
+/// Legacy path from pre-v0.2 — cleaned up on first write to the new location.
+#[cfg(target_os = "macos")]
+pub const PF_CONF_PATH_LEGACY: &str = "/tmp/vortix_killswitch.conf";
 /// macOS `WireGuard` runtime directory.
 #[cfg(target_os = "macos")]
 pub const WIREGUARD_RUN_DIR: &str = "/var/run/wireguard";

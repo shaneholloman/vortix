@@ -6,8 +6,22 @@ use vortix::app::App;
 use vortix::{cli, config, event, ui};
 
 fn main() -> Result<()> {
-    // Initialize error handling
+    // Initialize error handling first — color_eyre::install() sets its own
+    // panic hook, so we must call it before installing ours.
     color_eyre::install()?;
+
+    // Now capture color_eyre's hook and wrap it with terminal restoration
+    // and recovery instructions. Drop glue on App will still run to release
+    // kill switch rules and VPN processes.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        eprintln!();
+        eprintln!("Vortix crashed unexpectedly.");
+        eprintln!("If your network is broken, run:  vortix release-killswitch");
+        eprintln!();
+        default_hook(info);
+    }));
 
     // Parse arguments
     let args = Args::parse();

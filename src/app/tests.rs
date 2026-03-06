@@ -144,7 +144,7 @@ fn test_disconnect_result_success_transitions_to_disconnected() {
 }
 
 #[test]
-fn test_disconnect_result_failure_shows_error_toast() {
+fn test_disconnect_result_failure_stays_disconnecting() {
     let mut app = test_app();
     set_disconnecting(&mut app, "test-vpn");
 
@@ -155,12 +155,13 @@ fn test_disconnect_result_failure_shows_error_toast() {
     });
 
     assert!(
-        matches!(app.connection_state, ConnectionState::Disconnected),
-        "Expected Disconnected after failed DisconnectResult"
+        matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
+        "Should remain Disconnecting after failed disconnect (VPN may still be running)"
     );
     let toast = app.toast.as_ref().expect("toast should be set");
     assert_eq!(toast.toast_type, ToastType::Error);
-    assert!(toast.message.contains("permission denied"));
+    assert!(toast.message.contains("Disconnect failed"));
+    assert!(toast.message.contains("force-disconnect"));
 }
 
 #[test]
@@ -431,7 +432,7 @@ fn test_pending_connect_drained_on_scanner_interface_gone() {
 }
 
 #[test]
-fn test_pending_cleared_on_disconnect_failure() {
+fn test_pending_preserved_on_disconnect_failure() {
     let mut app = test_app();
     add_profiles(&mut app, &["vpn-a", "vpn-b"]);
     set_disconnecting(&mut app, "vpn-a");
@@ -443,11 +444,12 @@ fn test_pending_cleared_on_disconnect_failure() {
         error: Some("permission denied".to_string()),
     });
 
-    assert_eq!(app.pending_connect, None);
-    assert!(matches!(
-        app.connection_state,
-        ConnectionState::Disconnected
-    ));
+    // pending_connect is preserved so it can fire after force-disconnect
+    assert_eq!(app.pending_connect, Some(1));
+    assert!(
+        matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
+        "Should remain Disconnecting after failed disconnect"
+    );
 }
 
 #[test]
@@ -985,7 +987,7 @@ fn test_reconnect_from_disconnected_with_last_profile() {
     app.reconnect();
 
     assert!(
-        matches!(app.connection_state, ConnectionState::Connecting { profile, .. } if profile == "my-vpn"),
+        matches!(app.connection_state, ConnectionState::Connecting { ref profile, .. } if profile == "my-vpn"),
         "Should initiate connection to last used profile"
     );
 }
@@ -1274,4 +1276,94 @@ fn test_sort_preserves_selection() {
         app.profiles[new_idx].name, "alpha",
         "Selection should follow the profile after re-sort"
     );
+}
+
+// ====================================================================
+// Unicode text field input tests (#98)
+// ====================================================================
+
+#[test]
+fn test_text_field_multibyte_insert_and_backspace() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut text = String::new();
+    let mut cursor: usize = 0;
+
+    // Type "café"
+    for c in ['c', 'a', 'f', 'é'] {
+        App::handle_text_field_input(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut text,
+            &mut cursor,
+        );
+    }
+    assert_eq!(text, "café");
+    assert_eq!(cursor, 4);
+
+    // Backspace should remove 'é', not panic
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(text, "caf");
+    assert_eq!(cursor, 3);
+}
+
+#[test]
+fn test_text_field_cursor_movement_with_multibyte() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut text = "日本語".to_string();
+    let mut cursor: usize = 3; // end
+
+    // Left arrow should move one character, not one byte
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(cursor, 2);
+
+    // Delete should remove '語' (the char at position 2)
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(text, "日本");
+    assert_eq!(cursor, 2);
+
+    // Home should go to 0
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::Home, KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(cursor, 0);
+
+    // End should go to char count (2)
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::End, KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(cursor, 2);
+}
+
+#[test]
+fn test_text_field_insert_at_middle_of_multibyte() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut text = "ab".to_string();
+    let mut cursor: usize = 1; // between 'a' and 'b'
+
+    // Insert 'ñ' between 'a' and 'b'
+    App::handle_text_field_input(
+        KeyEvent::new(KeyCode::Char('ñ'), KeyModifiers::NONE),
+        &mut text,
+        &mut cursor,
+    );
+    assert_eq!(text, "añb");
+    assert_eq!(cursor, 2);
 }

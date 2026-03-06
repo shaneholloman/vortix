@@ -387,6 +387,7 @@ mod killswitch_lifecycle {
     #[test]
     fn alwayson_blocks_when_disconnected() {
         let mut app = test_app();
+        app.is_root = true;
         app.killswitch_mode = KillSwitchMode::Auto;
         app.handle_message(Message::ToggleKillSwitch); // Auto -> AlwaysOn
         assert_eq!(app.killswitch_mode, KillSwitchMode::AlwaysOn);
@@ -396,6 +397,7 @@ mod killswitch_lifecycle {
     #[test]
     fn killswitch_activated_on_vpn_drop() {
         let mut app = test_app();
+        app.is_root = true;
         add_wg_profiles(&mut app, &["vpn-a"]);
         app.killswitch_mode = KillSwitchMode::Auto;
         app.killswitch_state = KillSwitchState::Armed;
@@ -445,6 +447,23 @@ mod killswitch_lifecycle {
 
         app.handle_message(Message::Quit);
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn non_root_cannot_enter_blocking_state() {
+        let mut app = test_app();
+        assert!(!app.is_root);
+        app.killswitch_mode = KillSwitchMode::Auto;
+        app.handle_message(Message::ToggleKillSwitch); // Auto -> AlwaysOn
+        assert_eq!(app.killswitch_mode, KillSwitchMode::AlwaysOn);
+        assert_eq!(
+            app.killswitch_state,
+            KillSwitchState::Armed,
+            "Non-root should be refused Blocking state"
+        );
+        let toast = app.toast.as_ref().expect("should show warning toast");
+        assert_eq!(toast.toast_type, ToastType::Warning);
+        assert!(toast.message.contains("root"));
     }
 }
 
