@@ -280,36 +280,7 @@ impl App {
                 self.handle_message(Message::Import(path_clone));
                 self.handle_message(Message::CloseOverlay);
             }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < path.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Home => {
-                *cursor = 0;
-            }
-            KeyCode::End => {
-                *cursor = path.len();
-            }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    path.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
-            }
-            KeyCode::Delete => {
-                if *cursor < path.len() {
-                    path.remove(*cursor);
-                }
-            }
-            KeyCode::Char(c) => {
-                path.insert(*cursor, c);
-                *cursor += 1;
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, path, cursor),
         }
     }
 
@@ -560,11 +531,11 @@ impl App {
                                 );
                             } else {
                                 let name = profile.name.clone();
-                                let len = name.len();
+                                let char_len = name.chars().count();
                                 self.input_mode = InputMode::Rename {
                                     index: idx,
                                     new_name: name,
-                                    cursor: len,
+                                    cursor: char_len,
                                 };
                             }
                         }
@@ -724,25 +695,7 @@ impl App {
                 }
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    new_name.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
-            }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < new_name.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Char(c) => {
-                new_name.insert(*cursor, c);
-                *cursor += 1;
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, new_name, cursor),
         }
     }
 
@@ -751,27 +704,11 @@ impl App {
             KeyCode::Esc | KeyCode::Enter => {
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Backspace => {
-                if *cursor > 0 {
-                    query.remove(*cursor - 1);
-                    *cursor -= 1;
-                }
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Char(_) => {
+                Self::handle_text_field_input(key, query, cursor);
                 self.apply_search_filter(query);
             }
-            KeyCode::Left => {
-                *cursor = cursor.saturating_sub(1);
-            }
-            KeyCode::Right => {
-                if *cursor < query.len() {
-                    *cursor += 1;
-                }
-            }
-            KeyCode::Char(c) => {
-                query.insert(*cursor, c);
-                *cursor += 1;
-                self.apply_search_filter(query);
-            }
-            _ => {}
+            _ => Self::handle_text_field_input(key, query, cursor),
         }
     }
 

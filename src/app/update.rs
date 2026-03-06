@@ -467,14 +467,11 @@ impl App {
         // Sync state and firewall (may refuse Blocking if not root)
         self.sync_killswitch();
 
-        // Log and toast based on new mode.
-        // If sync_killswitch already showed a root-required warning (state
-        // didn't reach Blocking despite the mode requesting it), don't
-        // overwrite that toast — it's more important for the user to see.
-        let blocking_refused = matches!(
-            self.killswitch_mode,
-            KillSwitchMode::AlwaysOn | KillSwitchMode::Auto
-        ) && !self.is_root
+        // If sync_killswitch refused Blocking because we're not root (only
+        // possible in AlwaysOn mode when disconnected), preserve the root
+        // warning toast instead of overwriting it with the mode toast.
+        let blocking_refused = matches!(self.killswitch_mode, KillSwitchMode::AlwaysOn)
+            && !self.is_root
             && !self.killswitch_state.is_blocking();
 
         if !blocking_refused {
