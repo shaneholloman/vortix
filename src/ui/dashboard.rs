@@ -114,7 +114,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_overlays(frame: &mut Frame, app: &mut App) {
+    use super::overlays::confirm_dialog::{self, ConfirmDialogConfig};
+
     match &app.input_mode {
         InputMode::DependencyError { protocol, missing } => {
             render_dependency_alert(frame, *protocol, missing);
@@ -125,7 +128,38 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             name,
             confirm_selected,
             ..
-        } => render_delete_confirm(frame, name, *confirm_selected),
+        } => {
+            let dialog_w: u16 = 50;
+            let prefix = "Are you sure you want to delete ";
+            let name_budget = usize::from(dialog_w)
+                .saturating_sub(4 + prefix.len() + 1)
+                .max(3);
+            let truncated = utils::truncate(name, name_budget);
+
+            confirm_dialog::render(
+                frame,
+                ConfirmDialogConfig {
+                    title: " Confirm Deletion ",
+                    body: vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::raw(prefix),
+                            Span::styled(
+                                truncated,
+                                Style::default()
+                                    .fg(theme::ACCENT_PRIMARY)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw("?"),
+                        ]),
+                    ],
+                    border_color: theme::ERROR,
+                    confirm_selected: *confirm_selected,
+                    width: dialog_w,
+                    height: 7,
+                },
+            );
+        }
         InputMode::AuthPrompt {
             profile_name,
             username,
@@ -149,12 +183,8 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
         ),
         InputMode::Rename {
             new_name, cursor, ..
-        } => {
-            render_rename_overlay(frame, new_name, *cursor);
-        }
-        InputMode::Help { scroll } => {
-            super::overlays::help::render(frame, *scroll);
-        }
+        } => render_rename_overlay(frame, new_name, *cursor),
+        InputMode::Help { scroll } => super::overlays::help::render(frame, *scroll),
         InputMode::Search { query, cursor } => {
             render_search_bar(frame, app, query, *cursor, app.profiles.len());
         }
@@ -164,8 +194,51 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             confirm_selected,
             ..
         } => {
-            render_confirm_switch(frame, from, to_name, *confirm_selected);
+            let max = 28;
+            let from_t = utils::truncate(from, max);
+            let to_t = utils::truncate(to_name, max);
+            confirm_dialog::render(
+                frame,
+                ConfirmDialogConfig {
+                    title: " Switch Profile ",
+                    body: vec![
+                        Line::from(vec![
+                            Span::styled(
+                                "Disconnect from ",
+                                Style::default().fg(theme::TEXT_SECONDARY),
+                            ),
+                            Span::styled(from_t, Style::default().fg(theme::ACCENT_PRIMARY)),
+                        ]),
+                        Line::from(vec![
+                            Span::styled(
+                                "and connect to ",
+                                Style::default().fg(theme::TEXT_SECONDARY),
+                            ),
+                            Span::styled(to_t, Style::default().fg(theme::SUCCESS)),
+                            Span::styled("?", Style::default().fg(theme::TEXT_SECONDARY)),
+                        ]),
+                    ],
+                    border_color: theme::WARNING,
+                    confirm_selected: *confirm_selected,
+                    width: 50,
+                    height: 7,
+                },
+            );
         }
+        InputMode::ConfirmQuit { confirm_selected } => confirm_dialog::render(
+            frame,
+            ConfirmDialogConfig {
+                title: " Quit? ",
+                body: vec![Line::from(Span::styled(
+                    "VPN connection may still be active. Quit anyway?",
+                    Style::default().fg(theme::TEXT_SECONDARY),
+                ))],
+                border_color: theme::WARNING,
+                confirm_selected: *confirm_selected,
+                width: 46,
+                height: 6,
+            },
+        ),
         InputMode::Normal => {}
     }
 
@@ -720,6 +793,9 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
         ConnectionState::Disconnected => (None, Color::Reset),
     };
 
+    let fixed_cols: u16 = 2 + 4 + 10 + 3; // status + proto + time + gaps
+    let name_budget = (inner.width.saturating_sub(fixed_cols)) as usize;
+
     let items: Vec<Row> = app
         .profiles
         .iter()
@@ -805,8 +881,11 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 ""
             };
+            let badge_len = state_badge.chars().count();
+            let display_name =
+                utils::truncate(&p.name, name_budget.saturating_sub(badge_len).max(3));
             let name_cell = Cell::from(Line::from(vec![
-                Span::styled(p.name.clone(), name_style),
+                Span::styled(display_name, name_style),
                 Span::styled(state_badge, Style::default().fg(active_color)),
             ]));
             let proto_cell = Cell::from(Span::styled(proto_icon, Style::default().fg(proto_color)));
@@ -860,8 +939,8 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     // Peak detection for dynamic Y-axis scaling (calculate first for title)
-    let max_down = app.down_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
-    let max_up = app.up_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
+    let max_down = app.down_history.iter().copied().fold(0.0, f64::max);
+    let max_up = app.up_history.iter().copied().fold(0.0, f64::max);
     let peak = (max_down.max(max_up) * 1.2).max(1024.0 * 1024.0 * 0.5);
     let (scale_val, scale_unit) = if peak >= 1024.0 * 1024.0 * 1024.0 {
         (peak / 1024.0 / 1024.0 / 1024.0, "GB/s")
@@ -939,36 +1018,38 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
         chunks[0],
     );
 
+    let hist_len = app.down_history.len();
     let canvas = Canvas::default()
         .block(Block::default())
         .x_bounds([0.0, 60.0])
         .y_bounds([0.0, peak])
         .paint(|ctx| {
-            if app.down_history.len() > 1 {
-                for i in 0..app.down_history.len() - 1 {
-                    let y1 = app.down_history[i].1;
-                    let y2 = app.down_history[i + 1].1;
-                    if y1 > 0.0 || y2 > 0.0 {
+            if hist_len > 1 {
+                #[allow(clippy::cast_precision_loss)]
+                for i in 0..hist_len - 1 {
+                    let x1 = i as f64;
+                    let x2 = (i + 1) as f64;
+
+                    let dy1 = app.down_history[i];
+                    let dy2 = app.down_history[i + 1];
+                    if dy1 > 0.0 || dy2 > 0.0 {
                         ctx.draw(&CanvasLine {
-                            x1: app.down_history[i].0,
-                            y1,
-                            x2: app.down_history[i + 1].0,
-                            y2,
+                            x1,
+                            y1: dy1,
+                            x2,
+                            y2: dy2,
                             color: theme::ACCENT_PRIMARY,
                         });
                     }
-                }
-            }
-            if app.up_history.len() > 1 {
-                for i in 0..app.up_history.len() - 1 {
-                    let y1 = app.up_history[i].1;
-                    let y2 = app.up_history[i + 1].1;
-                    if y1 > 0.0 || y2 > 0.0 {
+
+                    let uy1 = app.up_history[i];
+                    let uy2 = app.up_history[i + 1];
+                    if uy1 > 0.0 || uy2 > 0.0 {
                         ctx.draw(&CanvasLine {
-                            x1: app.up_history[i].0,
-                            y1,
-                            x2: app.up_history[i + 1].0,
-                            y2,
+                            x1,
+                            y1: uy1,
+                            x2,
+                            y2: uy2,
                             color: theme::SUCCESS,
                         });
                     }
@@ -1425,73 +1506,6 @@ fn render_permission_denied(frame: &mut Frame, action: &str) {
     ];
 
     frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), chunks[1]);
-}
-
-fn render_delete_confirm(frame: &mut Frame, name: &str, confirm_selected: bool) {
-    let area = frame.area();
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage(40),
-        Constraint::Percentage(20),
-        Constraint::Percentage(40),
-    ])
-    .split(area);
-
-    let popup_area = Layout::horizontal([
-        Constraint::Percentage(25),
-        Constraint::Percentage(50),
-        Constraint::Percentage(25),
-    ])
-    .split(popup_layout[1])[1];
-
-    frame.render_widget(Clear, popup_area);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::ERROR))
-        .title(" Confirm Deletion ");
-
-    let inner = block.inner(popup_area);
-    frame.render_widget(block, popup_area);
-
-    let yes_style = if confirm_selected {
-        Style::default()
-            .bg(theme::ROW_SELECTED_BG)
-            .fg(theme::ROW_SELECTED_FG)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::ROW_SELECTED_FG)
-    };
-
-    let no_style = if confirm_selected {
-        Style::default().fg(theme::NORD_POLAR_NIGHT_4)
-    } else {
-        Style::default()
-            .bg(theme::NORD_POLAR_NIGHT_4)
-            .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
-    };
-
-    let text = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::raw("Are you sure you want to delete "),
-            Span::styled(
-                name,
-                Style::default()
-                    .fg(theme::ACCENT_PRIMARY)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("?"),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(" [Y] Yes, Delete ", yes_style),
-            Span::raw("    "),
-            Span::styled(" [N] Cancel ", no_style),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), inner);
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2065,75 +2079,4 @@ fn render_search_bar(frame: &mut Frame, app: &App, query: &str, cursor: usize, t
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), inner);
-}
-
-fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool) {
-    let area = frame.area();
-    let width = 50u16.min(area.width.saturating_sub(4));
-    let height = 7u16;
-    let overlay = Rect {
-        x: (area.width / 2).saturating_sub(width / 2),
-        y: (area.height / 2).saturating_sub(height / 2),
-        width,
-        height,
-    };
-
-    frame.render_widget(Clear, overlay);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::WARNING))
-        .title(Span::styled(
-            " Switch Profile ",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ));
-
-    let inner = block.inner(overlay);
-    frame.render_widget(block, overlay);
-
-    let yes_style = if confirm {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::WARNING)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    };
-    let no_style = if confirm {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    } else {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::ACCENT_PRIMARY)
-            .add_modifier(Modifier::BOLD)
-    };
-
-    let text = vec![
-        Line::from(vec![
-            Span::styled(
-                "Disconnect from ",
-                Style::default().fg(theme::TEXT_SECONDARY),
-            ),
-            Span::styled(from, Style::default().fg(theme::ACCENT_PRIMARY)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "and connect to ",
-                Style::default().fg(theme::TEXT_SECONDARY),
-            ),
-            Span::styled(to, Style::default().fg(theme::SUCCESS)),
-            Span::styled("?", Style::default().fg(theme::TEXT_SECONDARY)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("     ", Style::default()),
-            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
-            Span::styled("  ", Style::default()),
-            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(text), inner);
 }

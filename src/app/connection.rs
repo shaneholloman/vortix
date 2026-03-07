@@ -235,12 +235,14 @@ impl App {
                 let _ = std::fs::remove_file(&pid_path);
                 let _ = std::fs::remove_file(&log_path);
 
+                let safe_name = crate::utils::sanitize_profile_name(&name);
+
                 // Build openvpn args
                 let mut args = vec![
                     "--config".to_string(),
                     config_path.to_str().unwrap_or("").to_string(),
                     "--daemon".to_string(),
-                    format!("vortix-{name}"),
+                    format!("vortix-{safe_name}"),
                     "--writepid".to_string(),
                     pid_path.to_str().unwrap_or("").to_string(),
                     "--log".to_string(),
@@ -614,10 +616,9 @@ impl App {
                                 .stderr(std::process::Stdio::piped())
                                 .output()
                         } else {
-                            // Target only the Vortix-managed daemon, not all openvpn processes.
-                            // connect_profile() spawns with `--daemon vortix-{name}`.
+                            let safe = crate::utils::sanitize_profile_name(&profile_name);
                             std::process::Command::new("pkill")
-                                .args(["-f", &format!("openvpn.*--daemon vortix-{profile_name}")])
+                                .args(["-f", &format!("openvpn.*--daemon vortix-{safe}")])
                                 .stdout(std::process::Stdio::piped())
                                 .stderr(std::process::Stdio::piped())
                                 .output()
@@ -709,8 +710,9 @@ impl App {
                                 .stderr(std::process::Stdio::piped())
                                 .output()
                         } else {
+                            let safe = crate::utils::sanitize_profile_name(&name);
                             std::process::Command::new("pkill")
-                                .args(["-9", "-f", &format!("openvpn.*--daemon vortix-{name}")])
+                                .args(["-9", "-f", &format!("openvpn.*--daemon vortix-{safe}")])
                                 .stdout(std::process::Stdio::piped())
                                 .stderr(std::process::Stdio::piped())
                                 .output()

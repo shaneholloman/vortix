@@ -37,7 +37,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     let title = if profile_name.is_empty() {
         " Config Viewer ".to_string()
     } else {
-        format!(" {profile_name} - Config ")
+        let max_name = (area.width as usize).saturating_sub(14); // " " + " - Config " + borders
+        let short = crate::utils::truncate(&profile_name, max_name);
+        format!(" {short} - Config ")
     };
 
     let block = Block::default()

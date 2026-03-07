@@ -985,16 +985,13 @@ impl App {
         // 6. Poll network stats (spawn-on-demand, non-blocking)
         self.poll_network_stats();
 
-        // 7. Update network stats history
-        let last = constants::NETWORK_HISTORY_SIZE - 1;
-        for i in 0..last {
-            self.down_history[i].1 = self.down_history[i + 1].1;
-            self.up_history[i].1 = self.up_history[i + 1].1;
-        }
+        // 7. Update network stats history (O(1) ring-buffer rotation)
+        self.down_history.pop_front();
+        self.up_history.pop_front();
         #[allow(clippy::cast_precision_loss)]
         {
-            self.down_history[last].1 = self.current_down as f64;
-            self.up_history[last].1 = self.current_up as f64;
+            self.down_history.push_back(self.current_down as f64);
+            self.up_history.push_back(self.current_up as f64);
         }
     }
 }

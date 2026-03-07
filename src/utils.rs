@@ -182,6 +182,21 @@ pub fn get_profiles_dir() -> std::io::Result<std::path::PathBuf> {
 /// Returns the `OpenVPN` runtime directory path for a given profile.
 ///
 /// Creates `~/.config/vortix/run/` if it doesn't exist.
+/// Strip a profile name down to ASCII `[A-Za-z0-9_-]` so it is safe for use
+/// in daemon names, filenames, and pkill regex patterns.
+#[must_use]
+pub fn sanitize_profile_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 /// Returns `(pid_path, log_path)` for the given profile name.
 ///
 /// # Errors
@@ -197,17 +212,7 @@ pub fn get_openvpn_run_paths(
         create_user_dir(&run_dir)?;
     }
 
-    // Sanitize profile name for use in filenames
-    let safe_name: String = profile_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    let safe_name = sanitize_profile_name(profile_name);
 
     let pid_path = run_dir.join(format!("{safe_name}.pid"));
     let log_path = run_dir.join(format!("{safe_name}.log"));
@@ -246,17 +251,7 @@ pub fn get_openvpn_auth_path(profile_name: &str) -> std::io::Result<std::path::P
         create_user_dir(&auth_dir)?;
     }
 
-    let safe_name: String = profile_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
+    let safe_name = sanitize_profile_name(profile_name);
     Ok(auth_dir.join(format!("{safe_name}.auth")))
 }
 
@@ -903,6 +898,44 @@ mod tests {
         assert_eq!(perms.mode() & 0o777, 0o600);
 
         delete_openvpn_auth_file(name);
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_ascii() {
+        assert_eq!(sanitize_profile_name("my-vpn_1"), "my-vpn_1");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_spaces() {
+        assert_eq!(sanitize_profile_name("my vpn server"), "my_vpn_server");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_special_chars() {
+        assert_eq!(sanitize_profile_name("vpn@home!#$"), "vpn_home___");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_unicode_rejected() {
+        assert_eq!(sanitize_profile_name("café-vpn"), "caf_-vpn");
+        assert_eq!(sanitize_profile_name("München"), "M_nchen");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_cjk() {
+        assert_eq!(sanitize_profile_name("日本VPN"), "__VPN");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_empty() {
+        assert_eq!(sanitize_profile_name(""), "");
+    }
+
+    #[test]
+    fn test_truncate_very_small_budget() {
+        assert_eq!(truncate("hello world", 3), "...");
+        assert_eq!(truncate("hello world", 2), "...");
+        assert_eq!(truncate("hello world", 0), "...");
     }
 
     #[test]

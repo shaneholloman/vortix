@@ -65,10 +65,10 @@ pub struct App {
     pub session_start: Option<Instant>,
 
     // === Network Telemetry ===
-    /// Historical download throughput data points for charting.
-    pub down_history: Vec<(f64, f64)>,
-    /// Historical upload throughput data points for charting.
-    pub up_history: Vec<(f64, f64)>,
+    /// Historical download throughput values for charting (y-values only; x is the index).
+    pub down_history: std::collections::VecDeque<f64>,
+    /// Historical upload throughput values for charting (y-values only; x is the index).
+    pub up_history: std::collections::VecDeque<f64>,
     /// Current download rate in bytes/second.
     pub current_down: u64,
     /// Current upload rate in bytes/second.
@@ -165,10 +165,8 @@ impl App {
     pub fn new(config: crate::config::AppConfig, config_dir: std::path::PathBuf) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
         let history_size = constants::NETWORK_HISTORY_SIZE;
-        #[allow(clippy::cast_precision_loss)]
-        let down_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
-        #[allow(clippy::cast_precision_loss)]
-        let up_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
+        let down_history = std::collections::VecDeque::from(vec![0.0; history_size]);
+        let up_history = std::collections::VecDeque::from(vec![0.0; history_size]);
         let mut app = Self {
             should_quit: false,
 
@@ -352,10 +350,8 @@ impl App {
     pub fn new_test() -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
         let history_size = constants::NETWORK_HISTORY_SIZE;
-        #[allow(clippy::cast_precision_loss)]
-        let down_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
-        #[allow(clippy::cast_precision_loss)]
-        let up_history = (0..history_size).map(|i| (i as f64, 0.0)).collect();
+        let down_history = std::collections::VecDeque::from(vec![0.0; history_size]);
+        let up_history = std::collections::VecDeque::from(vec![0.0; history_size]);
         Self {
             should_quit: false,
             connection_state: ConnectionState::Disconnected,
