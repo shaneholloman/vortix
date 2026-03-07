@@ -1,6 +1,7 @@
 //! UI rendering module
 
 mod dashboard;
+mod helpers;
 mod overlays;
 mod widgets;
 

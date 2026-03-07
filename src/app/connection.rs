@@ -66,27 +66,18 @@ impl App {
     /// Uses `which` to locate binaries — avoids running them directly since
     /// some tools (e.g. `wg-quick --version`) hang on macOS.
     fn check_dependencies(protocol: Protocol) -> Vec<String> {
-        fn binary_exists(name: &str) -> bool {
-            std::process::Command::new("which")
-                .arg(name)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .is_ok_and(|s| s.success())
-        }
-
         let mut missing = Vec::new();
         match protocol {
             Protocol::WireGuard => {
-                if !binary_exists("wg-quick") {
+                if !utils::binary_exists("wg-quick") {
                     missing.push("wg-quick".to_string());
                 }
-                if !binary_exists("wg") {
+                if !utils::binary_exists("wg") {
                     missing.push("wireguard-tools".to_string());
                 }
             }
             Protocol::OpenVPN => {
-                if !binary_exists("openvpn") {
+                if !utils::binary_exists("openvpn") {
                     missing.push("openvpn".to_string());
                 }
             }
@@ -96,26 +87,17 @@ impl App {
 
     /// Check for system-wide dependencies at startup and warn the user.
     pub(crate) fn check_system_dependencies(&mut self) {
-        fn binary_exists(name: &str) -> bool {
-            std::process::Command::new("which")
-                .arg(name)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .is_ok_and(|s| s.success())
-        }
-
         let mut missing: Vec<&str> = Vec::new();
 
-        if !binary_exists("curl") {
+        if !utils::binary_exists("curl") {
             missing.push("curl");
         }
 
-        if !binary_exists("openvpn") {
+        if !utils::binary_exists("openvpn") {
             missing.push("openvpn");
         }
 
-        if !binary_exists("wg-quick") {
+        if !utils::binary_exists("wg-quick") {
             missing.push("wg-quick");
         }
 
