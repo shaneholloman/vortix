@@ -182,18 +182,13 @@ pub fn get_profiles_dir() -> std::io::Result<std::path::PathBuf> {
 /// Returns the `OpenVPN` runtime directory path for a given profile.
 ///
 /// Creates `~/.config/vortix/run/` if it doesn't exist.
-/// Returns `(pid_path, log_path)` for the given profile name.
-///
-/// # Errors
-///
-/// Returns an error if directory creation fails.
-/// Strip a profile name down to `[A-Za-z0-9_-]` so it is safe for use in
-/// daemon names, filenames, and pkill regex patterns.
+/// Strip a profile name down to ASCII `[A-Za-z0-9_-]` so it is safe for use
+/// in daemon names, filenames, and pkill regex patterns.
 #[must_use]
 pub fn sanitize_profile_name(name: &str) -> String {
     name.chars()
         .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
                 c
             } else {
                 '_'
@@ -202,6 +197,11 @@ pub fn sanitize_profile_name(name: &str) -> String {
         .collect()
 }
 
+/// Returns `(pid_path, log_path)` for the given profile name.
+///
+/// # Errors
+///
+/// Returns an error if directory creation fails.
 pub fn get_openvpn_run_paths(
     profile_name: &str,
 ) -> std::io::Result<(std::path::PathBuf, std::path::PathBuf)> {

@@ -239,7 +239,7 @@ impl App {
             Ok(ImportTarget::Url(url)) => {
                 let tx = self.cmd_tx.clone();
                 self.show_toast(constants::MSG_DOWNLOADING.to_string(), ToastType::Info);
-                should_close_overlay = true;
+                should_close_overlay = false;
 
                 std::thread::spawn(
                     move || match crate::core::downloader::download_profile(&url) {
@@ -261,8 +261,8 @@ impl App {
                 should_close_overlay = last_imported_name.is_some();
             }
             Ok(ImportTarget::Directory(path)) => {
-                self.import_from_directory(&path);
-                should_close_overlay = true;
+                let count = self.import_from_directory(&path);
+                should_close_overlay = count > 0;
             }
             Err(e) => {
                 self.show_toast(e, ToastType::Error);
@@ -305,8 +305,9 @@ impl App {
         }
     }
 
-    /// Bulk import all .conf and .ovpn files from a directory
-    fn import_from_directory(&mut self, dir_path: &Path) {
+    /// Bulk import all .conf and .ovpn files from a directory.
+    /// Returns the number of successfully imported profiles.
+    fn import_from_directory(&mut self, dir_path: &Path) -> usize {
         let mut imported = 0;
         let mut failed = 0;
 
@@ -378,5 +379,6 @@ impl App {
                 self.show_toast(format!("Error reading directory: {e}"), ToastType::Error);
             }
         }
+        imported
     }
 }

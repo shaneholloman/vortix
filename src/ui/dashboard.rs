@@ -221,7 +221,7 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             ConfirmDialogConfig {
                 title: " Quit? ",
                 body: vec![Line::from(Span::styled(
-                    "VPN is still active. Quit anyway?",
+                    "VPN connection may still be active. Quit anyway?",
                     Style::default().fg(theme::TEXT_SECONDARY),
                 ))],
                 border_color: theme::WARNING,
@@ -873,7 +873,8 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
                 ""
             };
             let badge_len = state_badge.chars().count();
-            let display_name = utils::truncate(&p.name, name_budget.saturating_sub(badge_len));
+            let display_name =
+                utils::truncate(&p.name, name_budget.saturating_sub(badge_len).max(3));
             let name_cell = Cell::from(Line::from(vec![
                 Span::styled(display_name, name_style),
                 Span::styled(state_badge, Style::default().fg(active_color)),
