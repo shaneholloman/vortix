@@ -128,29 +128,38 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             name,
             confirm_selected,
             ..
-        } => confirm_dialog::render(
-            frame,
-            ConfirmDialogConfig {
-                title: " Confirm Deletion ",
-                body: vec![
-                    Line::from(""),
-                    Line::from(vec![
-                        Span::raw("Are you sure you want to delete "),
-                        Span::styled(
-                            name.as_str(),
-                            Style::default()
-                                .fg(theme::ACCENT_PRIMARY)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw("?"),
-                    ]),
-                ],
-                border_color: theme::ERROR,
-                confirm_selected: *confirm_selected,
-                width: 50,
-                height: 7,
-            },
-        ),
+        } => {
+            let dialog_w: u16 = 50;
+            let prefix = "Are you sure you want to delete ";
+            let name_budget = usize::from(dialog_w)
+                .saturating_sub(4 + prefix.len() + 1)
+                .max(3);
+            let truncated = utils::truncate(name, name_budget);
+
+            confirm_dialog::render(
+                frame,
+                ConfirmDialogConfig {
+                    title: " Confirm Deletion ",
+                    body: vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::raw(prefix),
+                            Span::styled(
+                                truncated,
+                                Style::default()
+                                    .fg(theme::ACCENT_PRIMARY)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::raw("?"),
+                        ]),
+                    ],
+                    border_color: theme::ERROR,
+                    confirm_selected: *confirm_selected,
+                    width: dialog_w,
+                    height: 7,
+                },
+            );
+        }
         InputMode::AuthPrompt {
             profile_name,
             username,

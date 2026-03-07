@@ -251,17 +251,7 @@ pub fn get_openvpn_auth_path(profile_name: &str) -> std::io::Result<std::path::P
         create_user_dir(&auth_dir)?;
     }
 
-    let safe_name: String = profile_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
+    let safe_name = sanitize_profile_name(profile_name);
     Ok(auth_dir.join(format!("{safe_name}.auth")))
 }
 

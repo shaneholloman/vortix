@@ -16,8 +16,16 @@ enum ConfirmAction {
 /// Shared logic for all Yes/No confirmation dialogs.
 fn handle_confirm_keys(key: KeyEvent, confirm_selected: &mut bool) -> ConfirmAction {
     match key.code {
-        KeyCode::Tab | KeyCode::Left | KeyCode::Right | KeyCode::Char('h' | 'l') => {
+        KeyCode::Tab => {
             *confirm_selected = !*confirm_selected;
+            ConfirmAction::None
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            *confirm_selected = true;
+            ConfirmAction::None
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            *confirm_selected = false;
             ConfirmAction::None
         }
         KeyCode::Char('y' | 'Y') => ConfirmAction::Confirmed,
@@ -455,17 +463,10 @@ impl App {
                 }
             }
 
-            // Home/End: always profile-level; g/G: panel-aware
-            KeyCode::Home => {
+            KeyCode::Home | KeyCode::Char('g') if self.focused_panel != FocusedPanel::Logs => {
                 self.handle_message(Message::ProfileMove(SelectionMove::First));
             }
-            KeyCode::End => {
-                self.handle_message(Message::ProfileMove(SelectionMove::Last));
-            }
-            KeyCode::Char('g') if self.focused_panel != FocusedPanel::Logs => {
-                self.handle_message(Message::ProfileMove(SelectionMove::First));
-            }
-            KeyCode::Char('G') if self.focused_panel != FocusedPanel::Logs => {
+            KeyCode::End | KeyCode::Char('G') if self.focused_panel != FocusedPanel::Logs => {
                 self.handle_message(Message::ProfileMove(SelectionMove::Last));
             }
             KeyCode::PageUp => {
