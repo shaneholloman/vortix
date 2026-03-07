@@ -612,7 +612,7 @@ fn get_connection_info(
 ) {
     match &app.connection_state {
         ConnectionState::Disconnected => {
-            ("✗ DISCONNECTED", theme::ERROR, "None", "None", "-", None)
+            ("○ DISCONNECTED", theme::ERROR, "None", "None", "-", None)
         }
         ConnectionState::Connecting { profile, .. } => {
             ("⟳ CONNECTING", theme::WARNING, profile, "...", "...", None)
@@ -909,14 +909,13 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let stats_line = Line::from(vec![
-        Span::styled(" ▬", Style::default().fg(theme::SUCCESS)),
-        Span::styled(" UP: ", Style::default().fg(theme::TEXT_SECONDARY)),
+        Span::styled(" ▲ UP: ", Style::default().fg(theme::NORD_GREEN)),
         Span::styled(
             format!("{:<10}", utils::format_bytes_speed(app.current_up)),
             Style::default().fg(theme::TEXT_PRIMARY),
         ),
-        Span::styled(" ▬", Style::default().fg(theme::ACCENT_PRIMARY)),
-        Span::styled(" DOWN: ", Style::default().fg(theme::TEXT_SECONDARY)),
+        Span::styled(" │ ", Style::default().fg(theme::NORD_POLAR_NIGHT_4)),
+        Span::styled(" ▼ DOWN: ", Style::default().fg(theme::NORD_FROST_2)),
         Span::styled(
             format!("{:<10}", utils::format_bytes_speed(app.current_down)),
             Style::default().fg(theme::TEXT_PRIMARY),
