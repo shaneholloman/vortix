@@ -631,7 +631,7 @@ fn get_connection_info(
             details,
             ..
         } => (
-            "✓ CONNECTED",
+            "● CONNECTED",
             theme::SUCCESS,
             profile,
             &app.location,
@@ -729,10 +729,17 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             let is_active = active_profile.as_ref() == Some(&p.name);
             let is_never_used = p.last_used.is_none();
 
-            let (status_char, status_color) = if is_active {
+            let (status_char, status_color) = if idx < 9 {
+                (
+                    format!("{}", idx + 1),
+                    if is_active {
+                        active_color
+                    } else {
+                        theme::TEXT_SECONDARY
+                    },
+                )
+            } else if is_active {
                 ("●".to_string(), active_color)
-            } else if idx < 9 {
-                (format!("{}", idx + 1), theme::TEXT_SECONDARY)
             } else {
                 (" ".to_string(), Color::Reset)
             };
