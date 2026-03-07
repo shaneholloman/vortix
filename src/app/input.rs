@@ -178,7 +178,16 @@ impl App {
             return;
         }
 
-        if self.show_config || self.show_action_menu || self.show_bulk_menu {
+        if self.show_config {
+            match mouse.kind {
+                MouseEventKind::ScrollDown => self.scroll_down(),
+                MouseEventKind::ScrollUp => self.scroll_up(),
+                _ => {}
+            }
+            return;
+        }
+
+        if self.show_action_menu || self.show_bulk_menu {
             return;
         }
 

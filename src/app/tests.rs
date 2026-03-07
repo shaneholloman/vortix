@@ -10,7 +10,7 @@ fn init_test_env() {
         let test_config =
             std::env::temp_dir().join(format!("vortix_unit_test_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&test_config);
-        std::env::set_var("VORTIX_CONFIG_DIR", &test_config);
+        crate::config::set_config_dir(test_config);
     });
 }
 
