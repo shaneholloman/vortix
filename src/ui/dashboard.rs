@@ -114,7 +114,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_overlays(frame: &mut Frame, app: &mut App) {
+    use super::overlays::confirm_dialog::{self, ConfirmDialogConfig};
+
     match &app.input_mode {
         InputMode::DependencyError { protocol, missing } => {
             render_dependency_alert(frame, *protocol, missing);
@@ -125,7 +128,29 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             name,
             confirm_selected,
             ..
-        } => render_delete_confirm(frame, name, *confirm_selected),
+        } => confirm_dialog::render(
+            frame,
+            ConfirmDialogConfig {
+                title: " Confirm Deletion ",
+                body: vec![
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::raw("Are you sure you want to delete "),
+                        Span::styled(
+                            name.as_str(),
+                            Style::default()
+                                .fg(theme::ACCENT_PRIMARY)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw("?"),
+                    ]),
+                ],
+                border_color: theme::ERROR,
+                confirm_selected: *confirm_selected,
+                width: 50,
+                height: 7,
+            },
+        ),
         InputMode::AuthPrompt {
             profile_name,
             username,
@@ -149,12 +174,8 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
         ),
         InputMode::Rename {
             new_name, cursor, ..
-        } => {
-            render_rename_overlay(frame, new_name, *cursor);
-        }
-        InputMode::Help { scroll } => {
-            super::overlays::help::render(frame, *scroll);
-        }
+        } => render_rename_overlay(frame, new_name, *cursor),
+        InputMode::Help { scroll } => super::overlays::help::render(frame, *scroll),
         InputMode::Search { query, cursor } => {
             render_search_bar(frame, app, query, *cursor, app.profiles.len());
         }
@@ -164,11 +185,51 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             confirm_selected,
             ..
         } => {
-            render_confirm_switch(frame, from, to_name, *confirm_selected);
+            let max = 28;
+            let from_t = utils::truncate(from, max);
+            let to_t = utils::truncate(to_name, max);
+            confirm_dialog::render(
+                frame,
+                ConfirmDialogConfig {
+                    title: " Switch Profile ",
+                    body: vec![
+                        Line::from(vec![
+                            Span::styled(
+                                "Disconnect from ",
+                                Style::default().fg(theme::TEXT_SECONDARY),
+                            ),
+                            Span::styled(from_t, Style::default().fg(theme::ACCENT_PRIMARY)),
+                        ]),
+                        Line::from(vec![
+                            Span::styled(
+                                "and connect to ",
+                                Style::default().fg(theme::TEXT_SECONDARY),
+                            ),
+                            Span::styled(to_t, Style::default().fg(theme::SUCCESS)),
+                            Span::styled("?", Style::default().fg(theme::TEXT_SECONDARY)),
+                        ]),
+                    ],
+                    border_color: theme::WARNING,
+                    confirm_selected: *confirm_selected,
+                    width: 50,
+                    height: 7,
+                },
+            );
         }
-        InputMode::ConfirmQuit { confirm_selected } => {
-            render_confirm_quit(frame, *confirm_selected);
-        }
+        InputMode::ConfirmQuit { confirm_selected } => confirm_dialog::render(
+            frame,
+            ConfirmDialogConfig {
+                title: " Quit? ",
+                body: vec![Line::from(Span::styled(
+                    "VPN is still active. Quit anyway?",
+                    Style::default().fg(theme::TEXT_SECONDARY),
+                ))],
+                border_color: theme::WARNING,
+                confirm_selected: *confirm_selected,
+                width: 46,
+                height: 6,
+            },
+        ),
         InputMode::Normal => {}
     }
 
@@ -1437,73 +1498,6 @@ fn render_permission_denied(frame: &mut Frame, action: &str) {
     frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), chunks[1]);
 }
 
-fn render_delete_confirm(frame: &mut Frame, name: &str, confirm_selected: bool) {
-    let area = frame.area();
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage(40),
-        Constraint::Percentage(20),
-        Constraint::Percentage(40),
-    ])
-    .split(area);
-
-    let popup_area = Layout::horizontal([
-        Constraint::Percentage(25),
-        Constraint::Percentage(50),
-        Constraint::Percentage(25),
-    ])
-    .split(popup_layout[1])[1];
-
-    frame.render_widget(Clear, popup_area);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::ERROR))
-        .title(" Confirm Deletion ");
-
-    let inner = block.inner(popup_area);
-    frame.render_widget(block, popup_area);
-
-    let yes_style = if confirm_selected {
-        Style::default()
-            .bg(theme::ROW_SELECTED_BG)
-            .fg(theme::ROW_SELECTED_FG)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::ROW_SELECTED_FG)
-    };
-
-    let no_style = if confirm_selected {
-        Style::default().fg(theme::NORD_POLAR_NIGHT_4)
-    } else {
-        Style::default()
-            .bg(theme::NORD_POLAR_NIGHT_4)
-            .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
-    };
-
-    let text = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::raw("Are you sure you want to delete "),
-            Span::styled(
-                name,
-                Style::default()
-                    .fg(theme::ACCENT_PRIMARY)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("?"),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(" [Y] Yes, Delete ", yes_style),
-            Span::raw("    "),
-            Span::styled(" [N] Cancel ", no_style),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), inner);
-}
-
 #[allow(clippy::too_many_lines)]
 fn render_activity_log(frame: &mut Frame, app: &App, area: Rect) {
     let is_focused = app.should_draw_focus(&crate::app::FocusedPanel::Logs);
@@ -2075,139 +2069,4 @@ fn render_search_bar(frame: &mut Frame, app: &App, query: &str, cursor: usize, t
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), inner);
-}
-
-fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool) {
-    let area = frame.area();
-    let width = 50u16.min(area.width.saturating_sub(4));
-    let height = 7u16;
-    let overlay = Rect {
-        x: (area.width / 2).saturating_sub(width / 2),
-        y: (area.height / 2).saturating_sub(height / 2),
-        width,
-        height,
-    };
-
-    let name_max = (width as usize).saturating_sub(22);
-    let from = utils::truncate(from, name_max);
-    let to = utils::truncate(to, name_max);
-
-    frame.render_widget(Clear, overlay);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::WARNING))
-        .title(Span::styled(
-            " Switch Profile ",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ));
-
-    let inner = block.inner(overlay);
-    frame.render_widget(block, overlay);
-
-    let yes_style = if confirm {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::WARNING)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    };
-    let no_style = if confirm {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    } else {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::ACCENT_PRIMARY)
-            .add_modifier(Modifier::BOLD)
-    };
-
-    let text = vec![
-        Line::from(vec![
-            Span::styled(
-                "Disconnect from ",
-                Style::default().fg(theme::TEXT_SECONDARY),
-            ),
-            Span::styled(from, Style::default().fg(theme::ACCENT_PRIMARY)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "and connect to ",
-                Style::default().fg(theme::TEXT_SECONDARY),
-            ),
-            Span::styled(to, Style::default().fg(theme::SUCCESS)),
-            Span::styled("?", Style::default().fg(theme::TEXT_SECONDARY)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("     ", Style::default()),
-            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
-            Span::styled("  ", Style::default()),
-            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(text), inner);
-}
-
-fn render_confirm_quit(frame: &mut Frame, confirm: bool) {
-    let area = frame.area();
-    let width = 46u16.min(area.width.saturating_sub(4));
-    let height = 6u16;
-    let overlay = Rect {
-        x: (area.width / 2).saturating_sub(width / 2),
-        y: (area.height / 2).saturating_sub(height / 2),
-        width,
-        height,
-    };
-
-    frame.render_widget(Clear, overlay);
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::WARNING))
-        .title(Span::styled(
-            " Quit? ",
-            Style::default()
-                .fg(theme::WARNING)
-                .add_modifier(Modifier::BOLD),
-        ));
-
-    let inner = block.inner(overlay);
-    frame.render_widget(block, overlay);
-
-    let yes_style = if confirm {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::WARNING)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    };
-    let no_style = if confirm {
-        Style::default().fg(theme::TEXT_SECONDARY)
-    } else {
-        Style::default()
-            .fg(Color::Black)
-            .bg(theme::ACCENT_PRIMARY)
-            .add_modifier(Modifier::BOLD)
-    };
-
-    let text = vec![
-        Line::from(Span::styled(
-            "VPN is still active. Quit anyway?",
-            Style::default().fg(theme::TEXT_SECONDARY),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("      ", Style::default()),
-            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
-            Span::styled("  ", Style::default()),
-            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(text), inner);
 }

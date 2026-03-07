@@ -7,6 +7,32 @@ use crate::constants;
 use crate::logger;
 use crate::message::{self, Message, ScrollMove, SelectionMove};
 
+enum ConfirmAction {
+    Confirmed,
+    Cancelled,
+    None,
+}
+
+/// Shared logic for all Yes/No confirmation dialogs.
+fn handle_confirm_keys(key: KeyEvent, confirm_selected: &mut bool) -> ConfirmAction {
+    match key.code {
+        KeyCode::Tab | KeyCode::Left | KeyCode::Right | KeyCode::Char('h' | 'l') => {
+            *confirm_selected = !*confirm_selected;
+            ConfirmAction::None
+        }
+        KeyCode::Char('y' | 'Y') => ConfirmAction::Confirmed,
+        KeyCode::Char('n' | 'N') | KeyCode::Esc => ConfirmAction::Cancelled,
+        KeyCode::Enter => {
+            if *confirm_selected {
+                ConfirmAction::Confirmed
+            } else {
+                ConfirmAction::Cancelled
+            }
+        }
+        _ => ConfirmAction::None,
+    }
+}
+
 impl App {
     #[allow(clippy::too_many_lines)]
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -167,28 +193,55 @@ impl App {
                     self.input_mode = InputMode::Search { query, cursor };
                 }
             }
-            InputMode::ConfirmDelete { .. } => self.handle_confirm_delete_keys(key),
-            InputMode::ConfirmSwitch { .. } => self.handle_confirm_switch_keys(key),
-            InputMode::ConfirmQuit { confirm_selected } => {
-                match key.code {
-                    KeyCode::Char('y' | 'Y') | KeyCode::Enter if confirm_selected => {
-                        self.handle_message(Message::Quit);
+            InputMode::ConfirmDelete {
+                mut confirm_selected,
+                ..
+            } => match handle_confirm_keys(key, &mut confirm_selected) {
+                ConfirmAction::Confirmed => self.handle_message(Message::ConfirmDelete),
+                ConfirmAction::Cancelled => self.handle_message(Message::CloseOverlay),
+                ConfirmAction::None => {
+                    if let InputMode::ConfirmDelete {
+                        confirm_selected: cs,
+                        ..
+                    } = &mut self.input_mode
+                    {
+                        *cs = confirm_selected;
                     }
-                    KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                        self.handle_message(Message::CloseOverlay);
-                    }
-                    KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                        self.input_mode = InputMode::ConfirmQuit {
-                            confirm_selected: !confirm_selected,
-                        };
-                    }
-                    KeyCode::Enter => {
-                        // "No" is selected
-                        self.handle_message(Message::CloseOverlay);
-                    }
-                    _ => {}
                 }
-            }
+            },
+            InputMode::ConfirmSwitch {
+                to_idx,
+                mut confirm_selected,
+                ..
+            } => match handle_confirm_keys(key, &mut confirm_selected) {
+                ConfirmAction::Confirmed => {
+                    self.handle_message(Message::ConfirmSwitch { idx: to_idx });
+                }
+                ConfirmAction::Cancelled => self.handle_message(Message::CloseOverlay),
+                ConfirmAction::None => {
+                    if let InputMode::ConfirmSwitch {
+                        confirm_selected: cs,
+                        ..
+                    } = &mut self.input_mode
+                    {
+                        *cs = confirm_selected;
+                    }
+                }
+            },
+            InputMode::ConfirmQuit {
+                mut confirm_selected,
+            } => match handle_confirm_keys(key, &mut confirm_selected) {
+                ConfirmAction::Confirmed => self.handle_message(Message::Quit),
+                ConfirmAction::Cancelled => self.handle_message(Message::CloseOverlay),
+                ConfirmAction::None => {
+                    if let InputMode::ConfirmQuit {
+                        confirm_selected: cs,
+                    } = &mut self.input_mode
+                    {
+                        *cs = confirm_selected;
+                    }
+                }
+            },
             InputMode::Normal => self.handle_normal_keys(key),
         }
     }
@@ -248,77 +301,6 @@ impl App {
                 }
             }
             _ => {}
-        }
-    }
-
-    fn handle_confirm_delete_keys(&mut self, key: KeyEvent) {
-        if let InputMode::ConfirmDelete {
-            index: _,
-            name: _,
-            confirm_selected,
-        } = &mut self.input_mode
-        {
-            match key.code {
-                KeyCode::Tab => {
-                    *confirm_selected = !*confirm_selected;
-                }
-                KeyCode::Left | KeyCode::Char('h') => {
-                    *confirm_selected = true;
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    *confirm_selected = false;
-                }
-                KeyCode::Char('y') => {
-                    self.handle_message(Message::ConfirmDelete);
-                }
-                KeyCode::Char('n') | KeyCode::Esc => {
-                    self.handle_message(Message::CloseOverlay);
-                }
-                KeyCode::Enter => {
-                    if *confirm_selected {
-                        self.handle_message(Message::ConfirmDelete);
-                    } else {
-                        self.handle_message(Message::CloseOverlay);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn handle_confirm_switch_keys(&mut self, key: KeyEvent) {
-        if let InputMode::ConfirmSwitch {
-            to_idx,
-            confirm_selected,
-            ..
-        } = &mut self.input_mode
-        {
-            let idx = *to_idx;
-            match key.code {
-                KeyCode::Tab => {
-                    *confirm_selected = !*confirm_selected;
-                }
-                KeyCode::Left | KeyCode::Char('h') => {
-                    *confirm_selected = true;
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    *confirm_selected = false;
-                }
-                KeyCode::Char('y') => {
-                    self.handle_message(Message::ConfirmSwitch { idx });
-                }
-                KeyCode::Char('n') | KeyCode::Esc => {
-                    self.handle_message(Message::CloseOverlay);
-                }
-                KeyCode::Enter => {
-                    if *confirm_selected {
-                        self.handle_message(Message::ConfirmSwitch { idx });
-                    } else {
-                        self.handle_message(Message::CloseOverlay);
-                    }
-                }
-                _ => {}
-            }
         }
     }
 
