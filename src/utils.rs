@@ -901,6 +901,44 @@ mod tests {
     }
 
     #[test]
+    fn test_sanitize_profile_name_ascii() {
+        assert_eq!(sanitize_profile_name("my-vpn_1"), "my-vpn_1");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_spaces() {
+        assert_eq!(sanitize_profile_name("my vpn server"), "my_vpn_server");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_special_chars() {
+        assert_eq!(sanitize_profile_name("vpn@home!#$"), "vpn_home___");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_unicode_rejected() {
+        assert_eq!(sanitize_profile_name("café-vpn"), "caf_-vpn");
+        assert_eq!(sanitize_profile_name("München"), "M_nchen");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_cjk() {
+        assert_eq!(sanitize_profile_name("日本VPN"), "__VPN");
+    }
+
+    #[test]
+    fn test_sanitize_profile_name_empty() {
+        assert_eq!(sanitize_profile_name(""), "");
+    }
+
+    #[test]
+    fn test_truncate_very_small_budget() {
+        assert_eq!(truncate("hello world", 3), "...");
+        assert_eq!(truncate("hello world", 2), "...");
+        assert_eq!(truncate("hello world", 0), "...");
+    }
+
+    #[test]
     fn test_read_openvpn_saved_auth_missing_file() {
         let creds = read_openvpn_saved_auth("nonexistent_profile_xyz_12345");
         assert!(creds.is_none());

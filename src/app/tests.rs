@@ -1367,3 +1367,202 @@ fn test_text_field_insert_at_middle_of_multibyte() {
     assert_eq!(text, "añb");
     assert_eq!(cursor, 2);
 }
+
+// ====================================================================
+// Confirm dialog key handling tests
+// ====================================================================
+
+#[test]
+fn test_confirm_dialog_left_selects_yes() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: false,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+    assert!(matches!(
+        app.input_mode,
+        InputMode::ConfirmQuit {
+            confirm_selected: true
+        }
+    ));
+}
+
+#[test]
+fn test_confirm_dialog_right_selects_no() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: true,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert!(matches!(
+        app.input_mode,
+        InputMode::ConfirmQuit {
+            confirm_selected: false
+        }
+    ));
+}
+
+#[test]
+fn test_confirm_dialog_tab_toggles() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: false,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert!(matches!(
+        app.input_mode,
+        InputMode::ConfirmQuit {
+            confirm_selected: true
+        }
+    ));
+
+    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert!(matches!(
+        app.input_mode,
+        InputMode::ConfirmQuit {
+            confirm_selected: false
+        }
+    ));
+}
+
+#[test]
+fn test_confirm_dialog_enter_yes_quits() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: true,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.should_quit);
+}
+
+#[test]
+fn test_confirm_dialog_enter_no_cancels() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: false,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(!app.should_quit);
+    assert!(matches!(app.input_mode, InputMode::Normal));
+}
+
+#[test]
+fn test_confirm_dialog_y_always_confirms() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: false,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert!(app.should_quit, "'y' should quit regardless of selection");
+}
+
+#[test]
+fn test_confirm_dialog_n_always_cancels() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a"]);
+    set_connected(&mut app, "vpn-a");
+    app.input_mode = InputMode::ConfirmQuit {
+        confirm_selected: true,
+    };
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    assert!(!app.should_quit);
+    assert!(matches!(app.input_mode, InputMode::Normal));
+}
+
+// ====================================================================
+// Home/End panel-aware tests
+// ====================================================================
+
+#[test]
+fn test_home_in_sidebar_moves_to_first_profile() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a", "vpn-b", "vpn-c"]);
+    app.profile_list_state.select(Some(2));
+    app.focused_panel = FocusedPanel::Sidebar;
+
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+    assert_eq!(app.profile_list_state.selected(), Some(0));
+}
+
+#[test]
+fn test_end_in_sidebar_moves_to_last_profile() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a", "vpn-b", "vpn-c"]);
+    app.profile_list_state.select(Some(0));
+    app.focused_panel = FocusedPanel::Sidebar;
+
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    assert_eq!(app.profile_list_state.selected(), Some(2));
+}
+
+#[test]
+fn test_home_in_logs_scrolls_to_top() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    add_profiles(&mut app, &["vpn-a", "vpn-b", "vpn-c"]);
+    app.profile_list_state.select(Some(2));
+    app.focused_panel = FocusedPanel::Logs;
+    app.logs_scroll = 10;
+    app.logs_auto_scroll = false;
+
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+    assert_eq!(app.logs_scroll, 0, "Home in Logs should scroll to top");
+    assert_eq!(
+        app.profile_list_state.selected(),
+        Some(2),
+        "Profile selection should not change"
+    );
+}
+
+#[test]
+fn test_end_in_logs_enables_auto_scroll() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Logs;
+    app.logs_auto_scroll = false;
+
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    assert!(
+        app.logs_auto_scroll,
+        "End in Logs should re-enable auto-scroll"
+    );
+}

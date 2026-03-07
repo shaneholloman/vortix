@@ -574,12 +574,42 @@ mod profile_import {
         std::fs::write(dir.join("empty.conf"), "").unwrap();
 
         let mut app = test_app();
+        app.input_mode = InputMode::Import {
+            path: dir.to_string_lossy().to_string(),
+            cursor: 0,
+        };
         let initial = app.profiles.len();
         app.handle_message(Message::Import(dir.to_string_lossy().to_string()));
 
         assert!(
             app.profiles.len() > initial,
             "Should import at least the valid profile"
+        );
+        assert!(
+            matches!(app.input_mode, InputMode::Normal),
+            "Overlay should close after successful directory import"
+        );
+    }
+
+    #[test]
+    fn import_empty_directory_keeps_overlay_open() {
+        let dir =
+            std::env::temp_dir().join(format!("vortix_empty_import_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(dir.join("readme.txt"), "not a config").unwrap();
+
+        let mut app = test_app();
+        app.input_mode = InputMode::Import {
+            path: dir.to_string_lossy().to_string(),
+            cursor: 0,
+        };
+        app.handle_message(Message::Import(dir.to_string_lossy().to_string()));
+
+        assert!(
+            matches!(app.input_mode, InputMode::Import { .. }),
+            "Overlay should stay open when no profiles were imported"
         );
     }
 }
