@@ -1,6 +1,8 @@
+use super::helpers::centered_rect;
 use crate::app::{App, AuthField, ConnectionState, InputMode, Protocol};
+use crate::state::QualityLevel;
 use ratatui::{
-    layout::{Alignment, Constraint, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
@@ -181,16 +183,6 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
 
         super::overlays::action_menu::render(frame, &actions, &mut app.action_menu_state, title);
     }
-}
-
-/// Helper to center a rect
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
-
-    let [area] = vertical.areas(area);
-    let [area] = horizontal.areas(area);
-    area
 }
 
 fn render_import_overlay(frame: &mut Frame, path: &str, cursor: usize) {
@@ -526,16 +518,18 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
 
             // Connection quality indicator
             let quality_indicator = if app.latency_ms > 0 {
-                if app.packet_loss >= 5.0 || app.jitter_ms >= 15 {
-                    ("●●○○○", theme::NORD_RED)
-                } else if app.packet_loss >= 1.0 || app.jitter_ms >= 5 {
-                    ("●●●○○", theme::NORD_YELLOW)
-                } else if app.latency_ms < 50 {
-                    ("●●●●●", theme::NORD_GREEN)
-                } else if app.latency_ms < 150 {
-                    ("●●●●○", theme::NORD_GREEN)
-                } else {
-                    ("●●●○○", theme::NORD_YELLOW)
+                match QualityLevel::from_metrics(app.packet_loss, app.jitter_ms) {
+                    QualityLevel::Poor => ("●●○○○", theme::NORD_RED),
+                    QualityLevel::Fair => ("●●●○○", theme::NORD_YELLOW),
+                    QualityLevel::Excellent => {
+                        if app.latency_ms < 50 {
+                            ("●●●●●", theme::NORD_GREEN)
+                        } else if app.latency_ms < 150 {
+                            ("●●●●○", theme::NORD_GREEN)
+                        } else {
+                            ("●●●○○", theme::NORD_YELLOW)
+                        }
+                    }
                 }
             } else {
                 ("─────", theme::TEXT_SECONDARY)
@@ -1779,12 +1773,10 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
         text.push(Line::from(""));
 
         // Row 6: Quality Metrics (Unified high-density)
-        let quality_status = if app.packet_loss >= 5.0 || app.jitter_ms >= 15 {
-            ("POOR", theme::NORD_RED)
-        } else if app.packet_loss >= 1.0 || app.jitter_ms >= 5 {
-            ("FAIR", theme::NORD_YELLOW)
-        } else {
-            ("EXCELLENT", theme::NORD_GREEN)
+        let quality_status = match QualityLevel::from_metrics(app.packet_loss, app.jitter_ms) {
+            QualityLevel::Poor => ("POOR", theme::NORD_RED),
+            QualityLevel::Fair => ("FAIR", theme::NORD_YELLOW),
+            QualityLevel::Excellent => ("EXCELLENT", theme::NORD_GREEN),
         };
 
         text.push(Line::from(vec![

@@ -182,6 +182,27 @@ pub struct Toast {
     pub expires: Instant,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum QualityLevel {
+    #[default]
+    Excellent,
+    Fair,
+    Poor,
+}
+
+impl QualityLevel {
+    #[must_use]
+    pub fn from_metrics(packet_loss: f32, jitter_ms: u64) -> Self {
+        if packet_loss >= 5.0 || jitter_ms >= 15 {
+            Self::Poor
+        } else if packet_loss >= 1.0 || jitter_ms >= 5 {
+            Self::Fair
+        } else {
+            Self::Excellent
+        }
+    }
+}
+
 impl Toast {
     /// Check if the toast notification has expired
     #[must_use]
