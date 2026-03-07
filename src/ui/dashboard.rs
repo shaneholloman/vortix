@@ -891,7 +891,7 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(inner);
 
     let is_disconnected = !matches!(app.connection_state, ConnectionState::Connected { .. });
-    let has_data = app.down_history.len() > 1 || app.up_history.len() > 1;
+    let has_data = max_down > 0.0 || max_up > 0.0;
 
     // Calculate session totals from connection details if available
     let (session_rx, session_tx) = match &app.connection_state {
@@ -1710,17 +1710,17 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
             {
                 let label_overhead = 10 + 2 + 1; // "Exit    : " + " (" + ")"
                 let available = (inner.width as usize).saturating_sub(label_overhead);
-                let isp_max = available * 60 / 100;
-                let loc_max = available.saturating_sub(isp_max);
+                let isp_budget = (available * 60 / 100).min(available);
+                let loc_budget = available.saturating_sub(isp_budget);
                 Line::from(vec![
                     Span::styled("Exit    : ", Style::default().fg(theme::TEXT_SECONDARY)),
                     Span::styled(
-                        utils::truncate(&app.isp, isp_max.max(5)),
+                        utils::truncate(&app.isp, isp_budget),
                         Style::default().fg(theme::TEXT_PRIMARY),
                     ),
                     Span::styled(" (", Style::default().fg(theme::TEXT_SECONDARY)),
                     Span::styled(
-                        utils::truncate(&app.location, loc_max.max(5)),
+                        utils::truncate(&app.location, loc_budget),
                         Style::default().fg(theme::TEXT_PRIMARY),
                     ),
                     Span::styled(")", Style::default().fg(theme::TEXT_SECONDARY)),
