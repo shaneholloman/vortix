@@ -99,7 +99,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // Render Zoomed Panel Overlay (if active)
     if let Some(panel) = &app.zoomed_panel {
         let area = centered_rect(90, 90, frame.area());
-        frame.render_widget(ratatui::widgets::Clear, area); // Clear background
+        frame.render_widget(ratatui::widgets::Clear, area);
 
         // Render the zoomed panel
         match panel {
@@ -115,7 +115,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 }
 
 fn render_overlays(frame: &mut Frame, app: &mut App) {
-    // Overlays still take priority
     match &app.input_mode {
         InputMode::DependencyError { protocol, missing } => {
             render_dependency_alert(frame, *protocol, missing);
@@ -570,12 +569,14 @@ fn render_cockpit_header(frame: &mut Frame, app: &App, area: Rect) {
                 && app.location != "Unknown"
                 && app.location != constants::MSG_DETECTING
             {
+                // Adaptive: use ~25% of terminal width for location, min 10
+                let loc_budget = (area.width as usize / 4).max(10);
                 header_spans.push(Span::styled(
                     " @ ",
                     Style::default().fg(theme::TEXT_SECONDARY),
                 ));
                 header_spans.push(Span::styled(
-                    utils::truncate(&app.location, 15),
+                    utils::truncate(&app.location, loc_budget),
                     Style::default().fg(theme::ACCENT_PRIMARY),
                 ));
             }
@@ -886,10 +887,11 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Layout: Stats (Top) | Chart (Bottom)
+    // Layout: Stats+Legend (Top) | Chart (Bottom)
     let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(inner);
 
-    // 1. Render Numeric Stats (Top row) - Removed redundant ping, added session totals
+    let is_disconnected = !matches!(app.connection_state, ConnectionState::Connected { .. });
+    let has_data = app.down_history.len() > 1 || app.up_history.len() > 1;
 
     // Calculate session totals from connection details if available
     let (session_rx, session_tx) = match &app.connection_state {
@@ -910,13 +912,14 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let stats_line = Line::from(vec![
-        Span::styled(" ▲ UP: ", Style::default().fg(theme::NORD_GREEN)),
+        Span::styled(" ▬", Style::default().fg(theme::SUCCESS)),
+        Span::styled(" UP: ", Style::default().fg(theme::TEXT_SECONDARY)),
         Span::styled(
             format!("{:<10}", utils::format_bytes_speed(app.current_up)),
             Style::default().fg(theme::TEXT_PRIMARY),
         ),
-        Span::styled(" │ ", Style::default().fg(theme::NORD_POLAR_NIGHT_4)),
-        Span::styled(" ▼ DOWN: ", Style::default().fg(theme::NORD_FROST_2)),
+        Span::styled(" ▬", Style::default().fg(theme::ACCENT_PRIMARY)),
+        Span::styled(" DOWN: ", Style::default().fg(theme::TEXT_SECONDARY)),
         Span::styled(
             format!("{:<10}", utils::format_bytes_speed(app.current_down)),
             Style::default().fg(theme::TEXT_PRIMARY),
@@ -933,45 +936,52 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
         chunks[0],
     );
 
-    let canvas = Canvas::default()
-        .block(Block::default())
-        .x_bounds([0.0, 60.0])
-        .y_bounds([0.0, peak])
-        .paint(|ctx| {
-            // Draw Streams
-            for i in 0..app.down_history.len() - 1 {
-                let y1 = app.down_history[i].1;
-                let y2 = app.down_history[i + 1].1;
-
-                // Skip drawing if both points are zero to avoid messy Braille dots
-                if y1 > 0.0 || y2 > 0.0 {
-                    ctx.draw(&CanvasLine {
-                        x1: app.down_history[i].0,
-                        y1,
-                        x2: app.down_history[i + 1].0,
-                        y2,
-                        color: theme::ACCENT_PRIMARY, // Frost Blue
-                    });
+    if is_disconnected && !has_data {
+        let empty_msg = Paragraph::new(Line::from(Span::styled(
+            "Connect to see throughput",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )))
+        .alignment(Alignment::Center);
+        frame.render_widget(empty_msg, chunks[1]);
+    } else {
+        let canvas = Canvas::default()
+            .block(Block::default())
+            .x_bounds([0.0, 60.0])
+            .y_bounds([0.0, peak])
+            .paint(|ctx| {
+                if app.down_history.len() > 1 {
+                    for i in 0..app.down_history.len() - 1 {
+                        let y1 = app.down_history[i].1;
+                        let y2 = app.down_history[i + 1].1;
+                        if y1 > 0.0 || y2 > 0.0 {
+                            ctx.draw(&CanvasLine {
+                                x1: app.down_history[i].0,
+                                y1,
+                                x2: app.down_history[i + 1].0,
+                                y2,
+                                color: theme::ACCENT_PRIMARY,
+                            });
+                        }
+                    }
                 }
-            }
-            for i in 0..app.up_history.len() - 1 {
-                let y1 = app.up_history[i].1;
-                let y2 = app.up_history[i + 1].1;
-
-                // Skip drawing if both points are zero to avoid messy Braille dots
-                if y1 > 0.0 || y2 > 0.0 {
-                    ctx.draw(&CanvasLine {
-                        x1: app.up_history[i].0,
-                        y1,
-                        x2: app.up_history[i + 1].0,
-                        y2,
-                        color: theme::SUCCESS, // Aurora Green
-                    });
+                if app.up_history.len() > 1 {
+                    for i in 0..app.up_history.len() - 1 {
+                        let y1 = app.up_history[i].1;
+                        let y2 = app.up_history[i + 1].1;
+                        if y1 > 0.0 || y2 > 0.0 {
+                            ctx.draw(&CanvasLine {
+                                x1: app.up_history[i].0,
+                                y1,
+                                x2: app.up_history[i + 1].0,
+                                y2,
+                                color: theme::SUCCESS,
+                            });
+                        }
+                    }
                 }
-            }
-        });
-
-    frame.render_widget(canvas, chunks[1]);
+            });
+        frame.render_widget(canvas, chunks[1]);
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1696,20 +1706,26 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
                 Span::styled("Server  : ", Style::default().fg(theme::TEXT_SECONDARY)),
                 Span::styled(&details.endpoint, Style::default().fg(theme::TEXT_PRIMARY)),
             ]),
-            // Row 3: Exit Node (ISP | Location)
-            Line::from(vec![
-                Span::styled("Exit    : ", Style::default().fg(theme::TEXT_SECONDARY)),
-                Span::styled(
-                    utils::truncate(&app.isp, 12),
-                    Style::default().fg(theme::TEXT_PRIMARY),
-                ),
-                Span::styled(" (", Style::default().fg(theme::TEXT_SECONDARY)),
-                Span::styled(
-                    utils::truncate(&app.location, 10),
-                    Style::default().fg(theme::TEXT_PRIMARY),
-                ),
-                Span::styled(")", Style::default().fg(theme::TEXT_SECONDARY)),
-            ]),
+            // Row 3: Exit Node (ISP | Location) — adaptive truncation
+            {
+                let label_overhead = 10 + 2 + 1; // "Exit    : " + " (" + ")"
+                let available = (inner.width as usize).saturating_sub(label_overhead);
+                let isp_max = available * 60 / 100;
+                let loc_max = available.saturating_sub(isp_max);
+                Line::from(vec![
+                    Span::styled("Exit    : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                    Span::styled(
+                        utils::truncate(&app.isp, isp_max.max(5)),
+                        Style::default().fg(theme::TEXT_PRIMARY),
+                    ),
+                    Span::styled(" (", Style::default().fg(theme::TEXT_SECONDARY)),
+                    Span::styled(
+                        utils::truncate(&app.location, loc_max.max(5)),
+                        Style::default().fg(theme::TEXT_PRIMARY),
+                    ),
+                    Span::styled(")", Style::default().fg(theme::TEXT_SECONDARY)),
+                ])
+            },
         ];
 
         // Row 4: Crypto/Protocol Info
@@ -1864,20 +1880,21 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
 
         frame.render_widget(Paragraph::new(text), inner);
     } else {
-        // Show pre-connect info when disconnected
-        let mut text = vec![
+        let max_lines = inner.height as usize;
+        let mut text: Vec<Line> = vec![
             Line::from(Span::styled(
                 "Not Connected",
-                Style::default().fg(theme::INACTIVE),
+                Style::default()
+                    .fg(theme::INACTIVE)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
         ];
 
-        // Show selected profile info with pre-connect ping
         if let Some(idx) = app.profile_list_state.selected() {
             if let Some(profile) = app.profiles.get(idx) {
                 text.push(Line::from(vec![
-                    Span::styled("Selected: ", Style::default().fg(theme::TEXT_SECONDARY)),
+                    Span::styled("Profile : ", Style::default().fg(theme::TEXT_SECONDARY)),
                     Span::styled(&profile.name, Style::default().fg(theme::ACCENT_PRIMARY)),
                 ]));
                 text.push(Line::from(vec![
@@ -1887,11 +1904,59 @@ fn render_connection_details(frame: &mut Frame, app: &App, area: Rect) {
                         Style::default().fg(theme::TEXT_PRIMARY),
                     ),
                 ]));
-                // Note: Location is only shown when connected (in header and connection details)
-                // Profile metadata doesn't include reliable location information
+                text.push(Line::from(vec![
+                    Span::styled("Config  : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                    Span::styled(
+                        utils::truncate(
+                            &profile.config_path.display().to_string(),
+                            inner.width.saturating_sub(10) as usize,
+                        ),
+                        Style::default().fg(theme::TEXT_SECONDARY),
+                    ),
+                ]));
+                if let Some(last_used) = profile.last_used {
+                    text.push(Line::from(vec![
+                        Span::styled("Last use: ", Style::default().fg(theme::TEXT_SECONDARY)),
+                        Span::styled(
+                            utils::format_relative_time(last_used),
+                            Style::default().fg(theme::TEXT_PRIMARY),
+                        ),
+                    ]));
+                }
+
+                text.push(Line::from(""));
+
+                // Pre-VPN network info
+                if !app.public_ip.is_empty() {
+                    text.push(Line::from(vec![
+                        Span::styled("Your IP : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                        Span::styled(&app.public_ip, Style::default().fg(theme::WARNING)),
+                    ]));
+                }
+                if !app.isp.is_empty()
+                    && app.isp != "Unknown"
+                    && app.isp != constants::MSG_DETECTING
+                {
+                    text.push(Line::from(vec![
+                        Span::styled("ISP     : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                        Span::styled(&app.isp, Style::default().fg(theme::TEXT_PRIMARY)),
+                    ]));
+                }
+                if !app.dns_server.is_empty() && app.dns_server != constants::MSG_DETECTING {
+                    text.push(Line::from(vec![
+                        Span::styled("DNS     : ", Style::default().fg(theme::TEXT_SECONDARY)),
+                        Span::styled(&app.dns_server, Style::default().fg(theme::TEXT_PRIMARY)),
+                    ]));
+                }
             }
+        } else {
+            text.push(Line::from(vec![Span::styled(
+                "Select a profile from the sidebar",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )]));
         }
 
+        text.truncate(max_lines);
         frame.render_widget(Paragraph::new(text), inner);
     }
 }
