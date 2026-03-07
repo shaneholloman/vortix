@@ -890,9 +890,6 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     // Layout: Stats+Legend (Top) | Chart (Bottom)
     let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(inner);
 
-    let is_disconnected = !matches!(app.connection_state, ConnectionState::Connected { .. });
-    let has_data = max_down > 0.0 || max_up > 0.0;
-
     // Calculate session totals from connection details if available
     let (session_rx, session_tx) = match &app.connection_state {
         ConnectionState::Connected { details, .. } => {
@@ -936,52 +933,43 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
         chunks[0],
     );
 
-    if is_disconnected && !has_data {
-        let empty_msg = Paragraph::new(Line::from(Span::styled(
-            "Connect to see throughput",
-            Style::default().fg(theme::TEXT_SECONDARY),
-        )))
-        .alignment(Alignment::Center);
-        frame.render_widget(empty_msg, chunks[1]);
-    } else {
-        let canvas = Canvas::default()
-            .block(Block::default())
-            .x_bounds([0.0, 60.0])
-            .y_bounds([0.0, peak])
-            .paint(|ctx| {
-                if app.down_history.len() > 1 {
-                    for i in 0..app.down_history.len() - 1 {
-                        let y1 = app.down_history[i].1;
-                        let y2 = app.down_history[i + 1].1;
-                        if y1 > 0.0 || y2 > 0.0 {
-                            ctx.draw(&CanvasLine {
-                                x1: app.down_history[i].0,
-                                y1,
-                                x2: app.down_history[i + 1].0,
-                                y2,
-                                color: theme::ACCENT_PRIMARY,
-                            });
-                        }
+    let canvas = Canvas::default()
+        .block(Block::default())
+        .x_bounds([0.0, 60.0])
+        .y_bounds([0.0, peak])
+        .paint(|ctx| {
+            if app.down_history.len() > 1 {
+                for i in 0..app.down_history.len() - 1 {
+                    let y1 = app.down_history[i].1;
+                    let y2 = app.down_history[i + 1].1;
+                    if y1 > 0.0 || y2 > 0.0 {
+                        ctx.draw(&CanvasLine {
+                            x1: app.down_history[i].0,
+                            y1,
+                            x2: app.down_history[i + 1].0,
+                            y2,
+                            color: theme::ACCENT_PRIMARY,
+                        });
                     }
                 }
-                if app.up_history.len() > 1 {
-                    for i in 0..app.up_history.len() - 1 {
-                        let y1 = app.up_history[i].1;
-                        let y2 = app.up_history[i + 1].1;
-                        if y1 > 0.0 || y2 > 0.0 {
-                            ctx.draw(&CanvasLine {
-                                x1: app.up_history[i].0,
-                                y1,
-                                x2: app.up_history[i + 1].0,
-                                y2,
-                                color: theme::SUCCESS,
-                            });
-                        }
+            }
+            if app.up_history.len() > 1 {
+                for i in 0..app.up_history.len() - 1 {
+                    let y1 = app.up_history[i].1;
+                    let y2 = app.up_history[i + 1].1;
+                    if y1 > 0.0 || y2 > 0.0 {
+                        ctx.draw(&CanvasLine {
+                            x1: app.up_history[i].0,
+                            y1,
+                            x2: app.up_history[i + 1].0,
+                            y2,
+                            color: theme::SUCCESS,
+                        });
                     }
                 }
-            });
-        frame.render_widget(canvas, chunks[1]);
-    }
+            }
+        });
+    frame.render_widget(canvas, chunks[1]);
 }
 
 #[allow(clippy::too_many_lines)]
