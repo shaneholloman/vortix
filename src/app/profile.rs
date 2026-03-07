@@ -233,11 +233,13 @@ impl App {
         use crate::message::Message;
 
         let mut last_imported_name: Option<String> = None;
+        let mut should_close_overlay = false;
 
         match resolve_target(path_str) {
             Ok(ImportTarget::Url(url)) => {
                 let tx = self.cmd_tx.clone();
                 self.show_toast(constants::MSG_DOWNLOADING.to_string(), ToastType::Info);
+                should_close_overlay = true;
 
                 std::thread::spawn(
                     move || match crate::core::downloader::download_profile(&url) {
@@ -256,9 +258,11 @@ impl App {
             }
             Ok(ImportTarget::File(path)) => {
                 last_imported_name = self.import_single_file(&path);
+                should_close_overlay = last_imported_name.is_some();
             }
             Ok(ImportTarget::Directory(path)) => {
                 self.import_from_directory(&path);
+                should_close_overlay = true;
             }
             Err(e) => {
                 self.show_toast(e, ToastType::Error);
@@ -271,6 +275,10 @@ impl App {
             if let Some(idx) = self.profiles.iter().position(|p| p.name == name) {
                 self.profile_list_state.select(Some(idx));
             }
+        }
+
+        if should_close_overlay {
+            self.handle_message(Message::CloseOverlay);
         }
     }
 

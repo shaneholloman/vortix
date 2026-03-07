@@ -10,11 +10,24 @@ use crate::message::{self, Message, ScrollMove, SelectionMove};
 impl App {
     #[allow(clippy::too_many_lines)]
     pub fn handle_key(&mut self, key: KeyEvent) {
-        // 1. Global: Quit (Always takes priority)
-        if (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
-            || (key.code == KeyCode::Char('q') && self.input_mode == InputMode::Normal)
-        {
+        // 1. Global: Quit
+        // Ctrl+C always force-quits.
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             self.handle_message(Message::Quit);
+            return;
+        }
+        // 'q' in normal mode: confirm first when VPN is active.
+        if key.code == KeyCode::Char('q') && self.input_mode == InputMode::Normal {
+            if matches!(
+                self.connection_state,
+                ConnectionState::Connected { .. } | ConnectionState::Connecting { .. }
+            ) {
+                self.input_mode = InputMode::ConfirmQuit {
+                    confirm_selected: false,
+                };
+            } else {
+                self.handle_message(Message::Quit);
+            }
             return;
         }
 
@@ -156,6 +169,26 @@ impl App {
             }
             InputMode::ConfirmDelete { .. } => self.handle_confirm_delete_keys(key),
             InputMode::ConfirmSwitch { .. } => self.handle_confirm_switch_keys(key),
+            InputMode::ConfirmQuit { confirm_selected } => {
+                match key.code {
+                    KeyCode::Char('y' | 'Y') | KeyCode::Enter if confirm_selected => {
+                        self.handle_message(Message::Quit);
+                    }
+                    KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                        self.handle_message(Message::CloseOverlay);
+                    }
+                    KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
+                        self.input_mode = InputMode::ConfirmQuit {
+                            confirm_selected: !confirm_selected,
+                        };
+                    }
+                    KeyCode::Enter => {
+                        // "No" is selected
+                        self.handle_message(Message::CloseOverlay);
+                    }
+                    _ => {}
+                }
+            }
             InputMode::Normal => self.handle_normal_keys(key),
         }
     }
@@ -192,18 +225,26 @@ impl App {
         }
 
         match mouse.kind {
-            MouseEventKind::ScrollDown => self.handle_message(Message::Scroll(ScrollMove::Down)),
-            MouseEventKind::ScrollUp => self.handle_message(Message::Scroll(ScrollMove::Up)),
-            MouseEventKind::Down(MouseButton::Left) => {
-                for (panel, area) in &self.panel_areas {
-                    if mouse.column >= area.x
-                        && mouse.column < area.x + area.width
-                        && mouse.row >= area.y
-                        && mouse.row < area.y + area.height
-                    {
-                        self.handle_message(Message::FocusPanel(panel.clone()));
-                        break;
+            MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                let hovered = self.panel_at(mouse.column, mouse.row);
+                let original = self.focused_panel.clone();
+                if let Some(panel) = hovered {
+                    self.focused_panel = panel;
+                }
+                match mouse.kind {
+                    MouseEventKind::ScrollDown => {
+                        self.handle_message(Message::Scroll(ScrollMove::Down));
                     }
+                    MouseEventKind::ScrollUp => {
+                        self.handle_message(Message::Scroll(ScrollMove::Up));
+                    }
+                    _ => unreachable!(),
+                }
+                self.focused_panel = original;
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(panel) = self.panel_at(mouse.column, mouse.row) {
+                    self.handle_message(Message::FocusPanel(panel));
                 }
             }
             _ => {}
@@ -287,7 +328,6 @@ impl App {
             KeyCode::Enter => {
                 let path_clone = path.clone();
                 self.handle_message(Message::Import(path_clone));
-                self.handle_message(Message::CloseOverlay);
             }
             _ => Self::handle_text_field_input(key, path, cursor),
         }
@@ -433,11 +473,17 @@ impl App {
                 }
             }
 
-            // Profile List Navigation (always available in Normal mode)
-            KeyCode::Home | KeyCode::Char('g') => {
+            // Home/End: always profile-level; g/G: panel-aware
+            KeyCode::Home => {
                 self.handle_message(Message::ProfileMove(SelectionMove::First));
             }
-            KeyCode::End | KeyCode::Char('G') => {
+            KeyCode::End => {
+                self.handle_message(Message::ProfileMove(SelectionMove::Last));
+            }
+            KeyCode::Char('g') if self.focused_panel != FocusedPanel::Logs => {
+                self.handle_message(Message::ProfileMove(SelectionMove::First));
+            }
+            KeyCode::Char('G') if self.focused_panel != FocusedPanel::Logs => {
                 self.handle_message(Message::ProfileMove(SelectionMove::Last));
             }
             KeyCode::PageUp => {

@@ -187,6 +187,21 @@ pub fn get_profiles_dir() -> std::io::Result<std::path::PathBuf> {
 /// # Errors
 ///
 /// Returns an error if directory creation fails.
+/// Strip a profile name down to `[A-Za-z0-9_-]` so it is safe for use in
+/// daemon names, filenames, and pkill regex patterns.
+#[must_use]
+pub fn sanitize_profile_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 pub fn get_openvpn_run_paths(
     profile_name: &str,
 ) -> std::io::Result<(std::path::PathBuf, std::path::PathBuf)> {
@@ -197,17 +212,7 @@ pub fn get_openvpn_run_paths(
         create_user_dir(&run_dir)?;
     }
 
-    // Sanitize profile name for use in filenames
-    let safe_name: String = profile_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    let safe_name = sanitize_profile_name(profile_name);
 
     let pid_path = run_dir.join(format!("{safe_name}.pid"));
     let log_path = run_dir.join(format!("{safe_name}.log"));

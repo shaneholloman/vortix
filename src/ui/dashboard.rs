@@ -166,6 +166,9 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
         } => {
             render_confirm_switch(frame, from, to_name, *confirm_selected);
         }
+        InputMode::ConfirmQuit { confirm_selected } => {
+            render_confirm_quit(frame, *confirm_selected);
+        }
         InputMode::Normal => {}
     }
 
@@ -720,6 +723,9 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
         ConnectionState::Disconnected => (None, Color::Reset),
     };
 
+    let fixed_cols: u16 = 2 + 4 + 10 + 3; // status + proto + time + gaps
+    let name_budget = (inner.width.saturating_sub(fixed_cols)) as usize;
+
     let items: Vec<Row> = app
         .profiles
         .iter()
@@ -805,8 +811,10 @@ fn render_profiles_sidebar(frame: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 ""
             };
+            let badge_len = state_badge.chars().count();
+            let display_name = utils::truncate(&p.name, name_budget.saturating_sub(badge_len));
             let name_cell = Cell::from(Line::from(vec![
-                Span::styled(p.name.clone(), name_style),
+                Span::styled(display_name, name_style),
                 Span::styled(state_badge, Style::default().fg(active_color)),
             ]));
             let proto_cell = Cell::from(Span::styled(proto_icon, Style::default().fg(proto_color)));
@@ -860,8 +868,8 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     // Peak detection for dynamic Y-axis scaling (calculate first for title)
-    let max_down = app.down_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
-    let max_up = app.up_history.iter().map(|(_, y)| *y).fold(0.0, f64::max);
+    let max_down = app.down_history.iter().copied().fold(0.0, f64::max);
+    let max_up = app.up_history.iter().copied().fold(0.0, f64::max);
     let peak = (max_down.max(max_up) * 1.2).max(1024.0 * 1024.0 * 0.5);
     let (scale_val, scale_unit) = if peak >= 1024.0 * 1024.0 * 1024.0 {
         (peak / 1024.0 / 1024.0 / 1024.0, "GB/s")
@@ -939,36 +947,38 @@ fn render_throughput_chart(frame: &mut Frame, app: &App, area: Rect) {
         chunks[0],
     );
 
+    let hist_len = app.down_history.len();
     let canvas = Canvas::default()
         .block(Block::default())
         .x_bounds([0.0, 60.0])
         .y_bounds([0.0, peak])
         .paint(|ctx| {
-            if app.down_history.len() > 1 {
-                for i in 0..app.down_history.len() - 1 {
-                    let y1 = app.down_history[i].1;
-                    let y2 = app.down_history[i + 1].1;
-                    if y1 > 0.0 || y2 > 0.0 {
+            if hist_len > 1 {
+                #[allow(clippy::cast_precision_loss)]
+                for i in 0..hist_len - 1 {
+                    let x1 = i as f64;
+                    let x2 = (i + 1) as f64;
+
+                    let dy1 = app.down_history[i];
+                    let dy2 = app.down_history[i + 1];
+                    if dy1 > 0.0 || dy2 > 0.0 {
                         ctx.draw(&CanvasLine {
-                            x1: app.down_history[i].0,
-                            y1,
-                            x2: app.down_history[i + 1].0,
-                            y2,
+                            x1,
+                            y1: dy1,
+                            x2,
+                            y2: dy2,
                             color: theme::ACCENT_PRIMARY,
                         });
                     }
-                }
-            }
-            if app.up_history.len() > 1 {
-                for i in 0..app.up_history.len() - 1 {
-                    let y1 = app.up_history[i].1;
-                    let y2 = app.up_history[i + 1].1;
-                    if y1 > 0.0 || y2 > 0.0 {
+
+                    let uy1 = app.up_history[i];
+                    let uy2 = app.up_history[i + 1];
+                    if uy1 > 0.0 || uy2 > 0.0 {
                         ctx.draw(&CanvasLine {
-                            x1: app.up_history[i].0,
-                            y1,
-                            x2: app.up_history[i + 1].0,
-                            y2,
+                            x1,
+                            y1: uy1,
+                            x2,
+                            y2: uy2,
                             color: theme::SUCCESS,
                         });
                     }
@@ -2078,6 +2088,10 @@ fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool)
         height,
     };
 
+    let name_max = (width as usize).saturating_sub(22);
+    let from = utils::truncate(from, name_max);
+    let to = utils::truncate(to, name_max);
+
     frame.render_widget(Clear, overlay);
 
     let block = Block::default()
@@ -2129,6 +2143,66 @@ fn render_confirm_switch(frame: &mut Frame, from: &str, to: &str, confirm: bool)
         Line::from(""),
         Line::from(vec![
             Span::styled("     ", Style::default()),
+            Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
+            Span::styled("  ", Style::default()),
+            Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(text), inner);
+}
+
+fn render_confirm_quit(frame: &mut Frame, confirm: bool) {
+    let area = frame.area();
+    let width = 46u16.min(area.width.saturating_sub(4));
+    let height = 6u16;
+    let overlay = Rect {
+        x: (area.width / 2).saturating_sub(width / 2),
+        y: (area.height / 2).saturating_sub(height / 2),
+        width,
+        height,
+    };
+
+    frame.render_widget(Clear, overlay);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::WARNING))
+        .title(Span::styled(
+            " Quit? ",
+            Style::default()
+                .fg(theme::WARNING)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let inner = block.inner(overlay);
+    frame.render_widget(block, overlay);
+
+    let yes_style = if confirm {
+        Style::default()
+            .fg(Color::Black)
+            .bg(theme::WARNING)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    };
+    let no_style = if confirm {
+        Style::default().fg(theme::TEXT_SECONDARY)
+    } else {
+        Style::default()
+            .fg(Color::Black)
+            .bg(theme::ACCENT_PRIMARY)
+            .add_modifier(Modifier::BOLD)
+    };
+
+    let text = vec![
+        Line::from(Span::styled(
+            "VPN is still active. Quit anyway?",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("      ", Style::default()),
             Span::styled(if confirm { "▸ [Y]es " } else { "  [Y]es " }, yes_style),
             Span::styled("  ", Style::default()),
             Span::styled(if confirm { "  [N]o " } else { "▸ [N]o " }, no_style),

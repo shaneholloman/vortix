@@ -142,6 +142,20 @@ impl App {
         };
     }
 
+    /// Return the panel whose rendered area contains the given screen coordinate.
+    pub(crate) fn panel_at(&self, col: u16, row: u16) -> Option<FocusedPanel> {
+        for (panel, area) in &self.panel_areas {
+            if col >= area.x
+                && col < area.x + area.width
+                && row >= area.y
+                && row < area.y + area.height
+            {
+                return Some(panel.clone());
+            }
+        }
+        None
+    }
+
     /// Get the maximum scroll position for the config viewer.
     /// This accounts for viewport height so scrolling stops when last line is visible.
     pub(crate) fn get_config_max_scroll(&self) -> u16 {

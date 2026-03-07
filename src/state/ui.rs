@@ -95,6 +95,11 @@ pub enum InputMode {
         to_name: String,
         confirm_selected: bool,
     },
+    /// Confirmation dialog before quitting while VPN is connected.
+    ConfirmQuit {
+        /// Is "Yes" currently selected?
+        confirm_selected: bool,
+    },
     /// `OpenVPN` authentication credentials dialog.
     AuthPrompt {
         /// Index of the profile requiring auth.
