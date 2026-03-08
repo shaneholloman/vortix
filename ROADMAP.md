@@ -1,159 +1,109 @@
 # Roadmap
 
-This document outlines the product direction for Vortix — release by release.
+Vortix exists because managing VPN connections from the terminal should feel as natural as `git` or `vim` — fast, keyboard-driven, and transparent about what's happening with your network.
 
-Each release has a **theme**: a single sentence describing what the user gains. Bugs are always fixed within the release they're discovered, but the theme drives what gets prioritized and what new ground is covered.
-
----
-
-## Current Status: v0.1.6 (Released)
-
-Vortix is a functional TUI VPN manager for macOS with basic Linux support. It has solid internal architecture (TEA message pattern, modular UI, 275+ tests), WireGuard + OpenVPN support, a kill switch, real-time telemetry, and profile management.
-
-**What v0.1.6 delivered:** Massive hardening — 19 bug fixes, 14 features, dashboard split into 13 modules, panic-safe test cleanup, and 6 previously-ignored tests restored.
+This roadmap describes the journey from "useful CLI tool" to "the VPN manager people recommend to friends."
 
 ---
 
-## v0.1.7 — "Trust the Dashboard"
+## Where We Are: v0.1.6
 
-> Every number, label, and state shown on screen is accurate.
+A developer installs Vortix, imports a profile, connects. It works. They see real-time telemetry, a kill switch, profile management. But they notice rough edges: the quality indicator says "EXCELLENT" before any data arrives, the activity log fills with duplicate warnings, renaming a profile quietly breaks reconnect. They think: *"This is cool, but can I trust it?"*
 
-**Why this matters:** A VPN manager that shows wrong information is worse than one that shows nothing. Users make security decisions based on what the dashboard says. If it says "EXCELLENT" when there's no data, or floods the log with false warnings, users lose trust.
-
-### Scope
-
-| Issue | Title | Category |
-|---|---|---|
-| #110 | Exponential backoff can overflow to infinite sleep | State machine |
-| #111 | Renaming a profile breaks reconnect | State machine |
-| #112 | Deleting a profile during Connecting causes confusion | State machine |
-| #113 | IP leak warning fires every tick — floods activity log | Telemetry |
-| #132 | 0ms latency falsely shows EXCELLENT quality | Display accuracy |
-| #106 | Action menu labels are misleading | Label accuracy |
-| #105 | CloseOverlay also un-zooms the panel | UX consistency |
-
-### Definition of Done
-
-- [ ] No state machine operation leaves the app in an unrecoverable state
-- [ ] Every metric displayed has a "no data yet" state instead of false values
-- [ ] Action menu labels accurately describe what each action does
-- [ ] Layout state (zoom) is independent of overlay state
-- [ ] All fixes have corresponding unit tests
-
-**Target:** 1 week after v0.1.6
+That question drives everything that follows.
 
 ---
 
-## v0.1.8 — "Polished & Consistent"
+## v0.1.7 — "Dependable"
 
-> The UI feels like one cohesive product, not a collection of features.
+**The promise:** You can rely on Vortix for your daily VPN without second-guessing what it tells you.
 
-**Why this matters:** Vortix has grown fast. Features were added across multiple sprints by different contributors. The result is small inconsistencies — different cursor styles per overlay, hardcoded colors, footer text that breaks on narrow terminals. This release makes the app feel intentionally designed.
+**What changes for the user:**
 
-### Scope
+1. **Connection quality monitoring becomes real.** Today, the quality indicator shows "EXCELLENT" with no data, and doesn't factor in latency at all. After v0.1.7, you see "Measuring..." until real telemetry arrives, and then a meaningful Excellent/Fair/Poor rating based on latency, jitter, and packet loss combined. The number in the dashboard means something.
 
-| Issue | Title | Category |
-|---|---|---|
-| #109 | Replace hardcoded colors with theme constants | Code quality |
-| #135 | Cursor style inconsistent across overlays | Visual consistency |
-| #134 | Footer truncates Help and Quit hints first | Responsive layout |
-| #107 | Clipboard copy fails silently on Wayland | Linux support |
-| #139 | No click-to-select for profiles in sidebar | Mouse support |
-| #136 | URL import leaves temp file behind | Cleanup |
-| #137 | Add tests for rename_profile path traversal | Test coverage |
-| #123 | Generalize centered_rect helper | Code quality |
-| #124 | Include latency in QualityLevel classification | Display accuracy |
+2. **Reconnect does what you expect.** Today, pressing `r` reconnects to a hidden "last connected" profile — not the one you're looking at in the sidebar. After v0.1.7, reconnect in the sidebar context operates on the selected profile. The label says exactly what happens.
 
-### Definition of Done
+3. **The state machine is bulletproof.** Rename a profile that was previously connected? Reconnect still finds it. Delete a profile while it's connecting? Blocked with a clear message. Retry loop after a failed connection? Capped at 5 minutes, not 12 days.
 
-- [ ] All UI colors come from `theme.rs` constants — no raw `Color::Rgb` in panel code
-- [ ] All text-input overlays use the same cursor style
-- [ ] Footer gracefully degrades on terminals < 80 columns
-- [ ] Clipboard works on macOS (pbcopy), X11 (xclip), and Wayland (wl-copy)
-- [ ] Mouse click selects a profile in the sidebar
-- [ ] No temp file leaks from any import path
+4. **The activity log is useful again.** Today, "IP unchanged" warnings fire every 30 seconds while connected — 120 lines per hour of noise. After v0.1.7, each warning fires once per session. The log shows things worth reading.
 
-**Target:** 2 weeks after v0.1.7
+**What this unlocks:** After v0.1.7, a user can connect in the morning, work all day, and trust that Vortix is accurately monitoring their connection. This is the minimum bar for anyone to adopt it as their daily VPN tool.
 
 ---
 
-## v0.2.0 — "Works Everywhere"
+## v0.1.8 — "Feels Like One Product"
 
-> First-class Linux support. Cross-platform parity.
+**The promise:** Every pixel and interaction feels intentionally designed — not bolted together from different sprints.
 
-**Why this matters:** Vortix works on Linux but relies on macOS-specific commands in several places. Half of VPN users are on Linux. This release makes Linux a first-class citizen, not an afterthought.
+**What changes for the user:**
 
-### Scope
+1. **A real theming system.** Today, colors are hardcoded in 13 different UI files. After v0.1.8, every color comes from `theme.rs`. This isn't just code cleanup — it's the foundation for user-selectable themes (Nord, Dracula, Solarized) in a future release. The app looks cohesive because it IS cohesive.
 
-- Replace macOS-specific commands (`ifconfig`, `netstat`) with cross-platform alternatives
-- WireGuard handshake verification (#31) with platform-aware `wg show` handling
-- Test on Ubuntu, Fedora, and Arch Linux
-- Add distro-specific installation instructions
-- CI matrix: macOS + Ubuntu + Fedora
-- Wayland and X11 clipboard support (started in v0.1.8)
+2. **The sidebar becomes a workspace.** Click a profile to select it (not just keyboard). See your profiles organized and navigable. The sidebar stops being a dumb list and starts being a control panel.
 
-### Definition of Done
+3. **It works on every terminal.** Narrow terminal? The footer degrades gracefully — Help and Quit are always visible. Wayland? Clipboard copy works. Small screen? No truncation artifacts. The app respects your environment instead of fighting it.
 
-- [ ] `cargo test` passes on macOS, Ubuntu 22.04, and Fedora 39
-- [ ] No `#[cfg(target_os = "macos")]` code runs on Linux (clean separation)
-- [ ] WireGuard handshake check works on both macOS (utun) and Linux (wg0) interface naming
-- [ ] Installation works via Homebrew (macOS), cargo install, AUR, and Nix
+4. **Consistent interactions everywhere.** Same cursor style in every text field. Same overlay behavior. Same keyboard patterns. A user who learns one overlay has learned them all.
 
-**Target:** 4 weeks after v0.1.8
+**What this unlocks:** After v0.1.8, Vortix screenshots look good in a README. People share it on Reddit and Hacker News because it *looks* like a tool worth trying. First impressions matter.
 
 ---
 
-## v0.3.0 — "Power User"
+## v0.2.0 — "Universal"
 
-> Features for people who use Vortix every day.
+**The promise:** If you use a terminal, Vortix works on your OS.
 
-**Why this matters:** Vortix's core is solid. Now it needs the features that turn casual users into daily drivers — automation, organization, and shell integration.
+**What changes for the user:**
 
-### Scope
+Today, Vortix is a macOS-first tool that happens to compile on Linux. v0.2.0 makes Linux a first-class citizen:
 
-- Profile groups with collapsible sidebar sections
-- Lifecycle hooks: pre/post connect/disconnect scripts (#36)
-- Auto-connect on startup / daemon mode (#16)
-- Shell completions for bash, zsh, fish via `clap_complete`
-- Connection history overlay with scrollable past sessions
-- Per-profile DNS settings
+1. **Platform-aware networking.** WireGuard interface detection works on both macOS (`utun3`) and Linux (`wg0`). No more handshake check failures because the OS names interfaces differently. `ifconfig`/`netstat` replaced with cross-platform alternatives.
 
-### Definition of Done
+2. **CI guarantees.** Every commit is tested on macOS, Ubuntu, and Fedora. Platform bugs are caught before release, not by users.
 
-- [ ] Users can organize 20+ profiles without scrolling
-- [ ] `vortix` can run headless as a daemon with auto-connect
-- [ ] Shell completions install via `vortix completions <shell>`
-- [ ] Pre/post hooks execute with connection context environment variables
+3. **Distro-native installation.** Homebrew (macOS), AUR (Arch), Nix flake, cargo install. One command to install, everywhere.
 
-**Target:** 6 weeks after v0.2.0
+**What this unlocks:** The addressable market doubles. Linux VPN users — sysadmins, security researchers, privacy advocates — can adopt Vortix. This is where community growth accelerates.
 
 ---
 
-## v1.0 — "Production Ready"
+## v0.3.0 — "Set and Forget"
 
-> Enterprise-grade, multi-protocol, multi-platform.
+**The promise:** Vortix manages your VPN so you don't have to think about it.
 
-### Scope
+**What changes for the user:**
 
-- Split tunneling configuration (#15)
-- Windows support (#17)
-- IKEv2/IPSec support
-- SOCKS5 proxy integration
-- Config file encryption at rest
-- Audit logging
-- Centralized config management
-- Debian/RPM packages
+1. **Auto-connect on startup.** Configure a default profile, and Vortix connects the moment you open a terminal (or runs as a background daemon). For remote workers, this means their VPN is always on.
+
+2. **Lifecycle hooks.** Run a script before connecting (check if on trusted network, update firewall rules) or after disconnecting (flush DNS, restart services). Vortix becomes composable with your existing workflow.
+
+3. **Profile groups.** Your 20 profiles organized into collapsible sections: "Work", "Personal", "Testing". With `g` key assignment for instant group switching.
+
+4. **Shell completions.** `vortix <tab>` just works in bash, zsh, and fish.
+
+**What this unlocks:** The "I use it every day" users. The ones who put Vortix in their dotfiles, recommend it in blog posts, and contribute back to the project.
 
 ---
 
-## Versioning Policy
+## v1.0 — "For Everyone"
 
-Vortix follows [Semantic Versioning](https://semver.org/):
-- **PATCH** (0.1.x): Bug fixes, UX polish, no breaking changes
-- **MINOR** (0.x.0): New features, backward compatible
-- **MAJOR** (x.0.0): Breaking changes (with migration guide)
+**The promise:** Production-grade VPN management for individuals and teams.
 
-Breaking changes will be documented in [CHANGELOG.md](CHANGELOG.md) with migration instructions.
+- **Split tunneling** — route only specific traffic through the VPN
+- **Windows support** — the last platform barrier
+- **Multi-protocol** — IKEv2/IPSec alongside WireGuard and OpenVPN
+- **Config encryption** — credentials encrypted at rest
+- **Audit logging** — who connected where, when
+- **Centralized management** — shared config for teams
+
+---
+
+## Release Philosophy
+
+- **Each release earns something.** v0.1.7 earns trust. v0.1.8 earns admiration. v0.2.0 earns reach. v0.3.0 earns loyalty. v1.0 earns revenue.
+- **Bugs are table stakes.** Every release fixes bugs, but that's not the headline. The headline is what the user can now DO.
+- **Features ship with quality.** No feature lands without tests, without consistent UI, without documentation. A half-shipped feature is worse than no feature.
 
 ## How to Contribute
 
