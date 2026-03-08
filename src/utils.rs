@@ -864,34 +864,40 @@ mod tests {
 
     // === OpenVPN auth file write/read tests ===
 
+    fn set_temp_config_dir() -> tempfile::TempDir {
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_utils_test_")
+            .tempdir()
+            .unwrap();
+        crate::config::set_config_dir(dir.path().to_path_buf());
+        dir
+    }
+
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_write_read_openvpn_auth_file() {
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_roundtrip";
-        // Write
         let result = write_openvpn_auth_file(name, "myuser", "mypass");
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.exists());
 
-        // Read
         let creds = read_openvpn_saved_auth(name);
         assert!(creds.is_some());
         let (user, pass) = creds.unwrap();
         assert_eq!(user, "myuser");
         assert_eq!(pass, "mypass");
 
-        // Clean up
         delete_openvpn_auth_file(name);
         assert!(!path.exists());
     }
 
     #[cfg(unix)]
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_auth_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_perms";
         let result = write_openvpn_auth_file(name, "user", "pass");
         assert!(result.is_ok());
@@ -948,15 +954,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_read_openvpn_saved_auth_empty_creds() {
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_empty_creds";
-        // Write empty username
         let path = get_openvpn_auth_path(name).unwrap();
         std::fs::write(&path, "\npassword\n").unwrap();
         assert!(read_openvpn_saved_auth(name).is_none());
 
-        // Write empty password
         std::fs::write(&path, "username\n\n").unwrap();
         assert!(read_openvpn_saved_auth(name).is_none());
 

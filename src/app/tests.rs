@@ -731,7 +731,6 @@ fn test_auth_prompt_shown_for_openvpn_with_auth_user_pass() {
 }
 
 #[test]
-#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_prompt_skipped_when_creds_saved() {
     let mut app = test_app();
     let tmp = tempfile::Builder::new()
@@ -794,7 +793,6 @@ fn test_auth_prompt_skipped_for_openvpn_without_auth_directive() {
 }
 
 #[test]
-#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_submit_triggers_connect() {
     let mut app = test_app();
     let tmp = tempfile::Builder::new()
@@ -895,7 +893,6 @@ fn test_auth_field_switching() {
 }
 
 #[test]
-#[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_delete_profile_cleans_auth_file() {
     let mut app = test_app();
     let tmp = tempfile::Builder::new()
