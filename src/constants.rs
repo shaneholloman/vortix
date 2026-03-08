@@ -201,8 +201,6 @@ pub const OVPN_LOG_ERRORS: &[&str] = &[
 ];
 /// Polling interval for `OpenVPN` log file (milliseconds).
 pub const OVPN_LOG_POLL_MS: u64 = 500;
-/// Polling interval for `WireGuard` handshake verification (milliseconds).
-pub const WG_HANDSHAKE_POLL_MS: u64 = 500;
 /// Delay (ms) after `OpenVPN` fork before chowning pid/log files to the real user.
 pub const OVPN_CHOWN_DELAY_MS: u64 = 200;
 /// Seconds to wait before checking if the `OpenVPN` daemon is still alive.
