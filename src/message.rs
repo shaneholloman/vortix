@@ -166,6 +166,16 @@ pub enum Message {
     // === Kill Switch ===
     /// Toggle kill switch mode (Off → Auto → `AlwaysOn` → Off)
     ToggleKillSwitch,
+
+    // === Inline-mode openers (used by action menus) ===
+    /// Open profile rename overlay for the selected profile
+    OpenRename,
+    /// Open profile search/filter overlay
+    OpenSearch,
+    /// Open the help overlay
+    OpenHelp,
+    /// Cycle the activity-log level filter (All → Errors → Warn → Info → All)
+    CycleLogFilter,
 }
 
 /// An item in the action menu, mapping a key to a message.
@@ -222,12 +232,27 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
                 label: "Delete Profile",
                 message: Message::OpenDelete(None),
             });
+            actions.push(ActionMenuItem {
+                key: "s",
+                label: "Sort Profiles",
+                message: Message::CycleSortOrder,
+            });
+            actions.push(ActionMenuItem {
+                key: "R",
+                label: "Rename Profile",
+                message: Message::OpenRename,
+            });
         }
         FocusedPanel::Logs => {
             actions.push(ActionMenuItem {
                 key: "L",
                 label: "Clear Activity Logs",
                 message: Message::ClearLogs,
+            });
+            actions.push(ActionMenuItem {
+                key: "f",
+                label: "Filter Log Level",
+                message: Message::CycleLogFilter,
             });
         }
         FocusedPanel::ConnectionDetails => {
@@ -237,9 +262,14 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
                 message: Message::CopyIp,
             });
         }
-        FocusedPanel::Security | FocusedPanel::Chart => {
-            // No specific panel actions yet for Security Guard or Chart
+        FocusedPanel::Security => {
+            actions.push(ActionMenuItem {
+                key: "K",
+                label: "Toggle Kill Switch",
+                message: Message::ToggleKillSwitch,
+            });
         }
+        FocusedPanel::Chart => {}
     }
 
     // 2. Universal Contextual Utility
@@ -277,6 +307,21 @@ pub fn get_bulk_actions() -> Vec<ActionMenuItem> {
             message: Message::CopyIp,
         },
         ActionMenuItem {
+            key: "K",
+            label: "Toggle Kill Switch",
+            message: Message::ToggleKillSwitch,
+        },
+        ActionMenuItem {
+            key: "/",
+            label: "Search Profiles",
+            message: Message::OpenSearch,
+        },
+        ActionMenuItem {
+            key: "?",
+            label: "Help",
+            message: Message::OpenHelp,
+        },
+        ActionMenuItem {
             key: "l",
             label: "Next Panel",
             message: Message::NextPanel,
@@ -307,13 +352,16 @@ mod tests {
         assert!(actions.iter().any(|a| a.key == "a")); // edit auth credentials
         assert!(actions.iter().any(|a| a.key == "A")); // clear auth credentials
         assert!(actions.iter().any(|a| a.key == "DEL"));
+        assert!(actions.iter().any(|a| a.key == "s")); // sort
+        assert!(actions.iter().any(|a| a.key == "R")); // rename
         assert!(actions.iter().any(|a| a.key == "z")); // universal zoom
     }
 
     #[test]
-    fn test_logs_actions_include_clear() {
+    fn test_logs_actions_include_clear_and_filter() {
         let actions = get_single_actions(&FocusedPanel::Logs);
         assert!(actions.iter().any(|a| a.key == "L"));
+        assert!(actions.iter().any(|a| a.key == "f")); // log filter
         assert!(actions.iter().any(|a| a.key == "z"));
     }
 
@@ -331,10 +379,10 @@ mod tests {
     }
 
     #[test]
-    fn test_security_actions_only_zoom() {
+    fn test_security_actions_include_killswitch() {
         let actions = get_single_actions(&FocusedPanel::Security);
-        assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0].key, "z");
+        assert!(actions.iter().any(|a| a.key == "K")); // kill switch
+        assert!(actions.iter().any(|a| a.key == "z")); // zoom
     }
 
     #[test]
@@ -344,12 +392,15 @@ mod tests {
         assert!(actions.iter().any(|a| a.key == "D")); // disconnect all
         assert!(actions.iter().any(|a| a.key == "q")); // quit
         assert!(actions.iter().any(|a| a.key == "y")); // copy IP
+        assert!(actions.iter().any(|a| a.key == "K")); // kill switch
+        assert!(actions.iter().any(|a| a.key == "/")); // search
+        assert!(actions.iter().any(|a| a.key == "?")); // help
     }
 
     #[test]
     fn test_bulk_actions_count() {
         let actions = get_bulk_actions();
-        assert_eq!(actions.len(), 7);
+        assert_eq!(actions.len(), 10);
     }
 
     #[test]

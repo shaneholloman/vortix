@@ -191,6 +191,18 @@ impl App {
 
             Message::ToggleKillSwitch => self.handle_toggle_killswitch(),
 
+            Message::OpenRename => self.handle_open_rename(),
+            Message::OpenSearch => {
+                self.input_mode = InputMode::Search {
+                    query: String::new(),
+                    cursor: 0,
+                };
+            }
+            Message::OpenHelp => {
+                self.input_mode = InputMode::Help { scroll: 0 };
+            }
+            Message::CycleLogFilter => self.handle_cycle_log_filter(),
+
             // System
             Message::Quit => self.handle_quit(),
             Message::Log(msg) => self.log(&msg),
@@ -993,5 +1005,48 @@ impl App {
             self.down_history.push_back(self.current_down as f64);
             self.up_history.push_back(self.current_up as f64);
         }
+    }
+
+    fn handle_open_rename(&mut self) {
+        if let Some(idx) = self.profile_list_state.selected() {
+            if let Some(profile) = self.profiles.get(idx) {
+                let active_profile = match &self.connection_state {
+                    ConnectionState::Connected { profile: p, .. }
+                    | ConnectionState::Connecting { profile: p, .. }
+                    | ConnectionState::Disconnecting { profile: p, .. } => Some(p.as_str()),
+                    ConnectionState::Disconnected => None,
+                };
+                if active_profile == Some(&profile.name) {
+                    self.show_toast(
+                        "Cannot rename an active profile — disconnect first".to_string(),
+                        ToastType::Warning,
+                    );
+                } else {
+                    let name = profile.name.clone();
+                    let char_len = name.chars().count();
+                    self.input_mode = InputMode::Rename {
+                        index: idx,
+                        new_name: name,
+                        cursor: char_len,
+                    };
+                }
+            }
+        }
+    }
+
+    fn handle_cycle_log_filter(&mut self) {
+        self.log_level_filter = match self.log_level_filter {
+            None => Some(crate::logger::LogLevel::Error),
+            Some(crate::logger::LogLevel::Error) => Some(crate::logger::LogLevel::Warning),
+            Some(crate::logger::LogLevel::Warning) => Some(crate::logger::LogLevel::Info),
+            _ => None,
+        };
+        let label = match self.log_level_filter {
+            Some(crate::logger::LogLevel::Error) => "Errors only",
+            Some(crate::logger::LogLevel::Warning) => "Warn+Error",
+            Some(crate::logger::LogLevel::Info) => "Info+Warn+Error",
+            None | Some(_) => "All",
+        };
+        self.show_toast(format!("Log filter: {label}"), ToastType::Info);
     }
 }
