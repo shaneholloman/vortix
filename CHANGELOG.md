@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-03-08
+
+### Bug Fixes
+
+- **ci:** Resolve Clippy and test failures on CI
+- Address Copilot review feedback (8 items)
+- Spurious "VPN dropped" auto-reconnect on force-kill
+- Add scrolling to help overlay
+- Isolate tests from real config dir + block mouse passthrough on overlays
+- P0 critical fixes — config viewer I/O, min terminal size, search/rename cursor
+- Address Copilot review on PR #89
+- Address Copilot review on PR #91
+- Address Copilot review on PR #92
+- Address Copilot review on PR #93
+- Resolve all 6 P0 critical issues (#95, #96, #97, #98, #99, #100)
+- Address Copilot review on PR #121
+- P1 UX improvements and test safety (#104, #103, #102, #115)
+- Enable mouse scroll in config viewer overlay
+- Address Copilot review on PR #125
+- Remove throughput chart empty state
+- Restore original chart arrows and disconnected indicator
+- Restore header connected indicator and sidebar numbering
+- Hardening round 2 — import UX, security, input routing, quit guard
+- Address Copilot review comments on PR #140
+- Address second round of Copilot review comments
+- Verify WireGuard handshake before declaring Connected ([#31](https://github.com/Harry-kp/vortix/pull/31))
+- Remove scanner handshake guard causing reconnect loops
+- Address Copilot review — auth mask chars, chart x-bound constant
+- Enable 6 previously-ignored auth tests to run without root
+- Sync action menus with actual panel capabilities
+- Address Copilot review — log filter consistency, comment wording
+
+### Features
+
+- V0.2.0 + v0.3.0 — refactor, reliability, and UX overhaul
+- P1 group A — duration format, throughput labels, connected badge, stale data
+- P1 group B — accessibility, panel shortcuts, context footer, log filtering
+- P2 group A — protocol in cockpit, DNS detail, expanded protocol badge
+- P2 group B — confirm switch dialog, syntax highlight & scan timestamp already done
+- P3 nice-to-have — profile sorting, latency thresholds
+- Extracted duplicate function calls, quality threshold exists in one place
+
+### Refactor
+
+- Extract shared confirm dialog component
+- Split dashboard.rs into per-panel modules ([#114](https://github.com/Harry-kp/vortix/pull/114))
+- Adopt tempfile crate for panic-safe test cleanup ([#116](https://github.com/Harry-kp/vortix/pull/116))
+
+### Testing
+
+- Add coverage for review comment fixes
+
+### Ci
+
+- Pin Rust 1.91.0 in CI and fix remaining lint issues
+
+### Revert
+
+- Remove WireGuard handshake polling that broke connections
+
+### Ui
+
+- Move toast notification from bottom-right to top-right
+
+
+
 ## [0.1.5] - 2026-02-16
 
 ### Bug Fixes
