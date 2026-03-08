@@ -212,6 +212,17 @@ fn check_wireguard_by_name(name: &str) -> Option<ActiveSession> {
         session.mtu = mtu;
     }
 
+    if session.latest_handshake.is_empty() {
+        crate::logger::log(
+            crate::logger::LogLevel::Debug,
+            "SCANNER",
+            format!(
+                "WireGuard interface '{interface_name}' exists but no handshake — not reporting as active"
+            ),
+        );
+        return None;
+    }
+
     Some(session)
 }
 

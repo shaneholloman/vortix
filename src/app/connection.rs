@@ -7,6 +7,22 @@ use crate::constants;
 use crate::message::Message;
 use crate::utils;
 
+/// Checks if any `WireGuard` peer on the given interface has completed a handshake.
+fn wg_has_handshake(interface: &str) -> bool {
+    std::process::Command::new("wg")
+        .args(["show", interface, "latest-handshakes"])
+        .output()
+        .ok()
+        .is_some_and(|out| {
+            String::from_utf8_lossy(&out.stdout).lines().any(|line| {
+                line.split('\t')
+                    .nth(1)
+                    .and_then(|ts| ts.trim().parse::<u64>().ok())
+                    .is_some_and(|ts| ts > 0)
+            })
+        })
+}
+
 impl App {
     /// Smart connection toggle: Connect, Disconnect, or Switch.
     ///
@@ -186,19 +202,47 @@ impl App {
         // Execute command in background to prevent TUI freeze
         std::thread::spawn(move || match protocol {
             Protocol::WireGuard => {
-                // wg-quick is a one-shot command: sets up interface and exits
+                let config_str = config_path.to_str().unwrap_or("").to_string();
                 match std::process::Command::new("wg-quick")
-                    .args(["up", config_path.to_str().unwrap_or("")])
+                    .args(["up", &config_str])
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .output()
                 {
                     Ok(out) if out.status.success() => {
-                        let _ = cmd_tx.send(Message::ConnectResult {
-                            profile: name,
-                            success: true,
-                            error: None,
-                        });
+                        let iface = config_path
+                            .file_stem()
+                            .map_or(name.clone(), |s| s.to_string_lossy().to_string());
+
+                        let timeout = std::time::Duration::from_secs(connect_timeout_secs);
+                        let poll =
+                            std::time::Duration::from_millis(constants::WG_HANDSHAKE_POLL_MS);
+                        let start = std::time::Instant::now();
+
+                        loop {
+                            std::thread::sleep(poll);
+                            if wg_has_handshake(&iface) {
+                                let _ = cmd_tx.send(Message::ConnectResult {
+                                    profile: name,
+                                    success: true,
+                                    error: None,
+                                });
+                                break;
+                            }
+                            if start.elapsed() >= timeout {
+                                let _ = std::process::Command::new("wg-quick")
+                                    .args(["down", &config_str])
+                                    .output();
+                                let _ = cmd_tx.send(Message::ConnectResult {
+                                    profile: name,
+                                    success: false,
+                                    error: Some(
+                                        "WireGuard: no handshake — peer unreachable".to_string(),
+                                    ),
+                                });
+                                break;
+                            }
+                        }
                     }
                     Ok(out) => {
                         let stderr = String::from_utf8_lossy(&out.stderr).to_string();
