@@ -59,7 +59,7 @@ pub fn render(
     let make_cursor_line =
         |text: &str, cursor: usize, is_focused: bool, mask: bool| -> Line<'static> {
             let display_text: String = if mask {
-                "\u{25CF}".repeat(text.len()) // ● characters
+                "\u{25CF}".repeat(text.chars().count())
             } else {
                 text.to_string()
             };
@@ -92,7 +92,7 @@ pub fn render(
                 ])
             } else {
                 let full_text: String = if mask && !text.is_empty() {
-                    "\u{25CF}".repeat(text.len())
+                    "\u{25CF}".repeat(text.chars().count())
                 } else if text.is_empty() {
                     String::new()
                 } else {

@@ -1,5 +1,5 @@
 use crate::app::{App, ConnectionState};
-use crate::{theme, utils};
+use crate::{constants, theme, utils};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
@@ -101,9 +101,11 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     let hist_len = app.down_history.len();
+    #[allow(clippy::cast_precision_loss)]
+    let x_max = constants::NETWORK_HISTORY_SIZE as f64;
     let canvas = Canvas::default()
         .block(Block::default())
-        .x_bounds([0.0, 60.0])
+        .x_bounds([0.0, x_max])
         .y_bounds([0.0, peak])
         .paint(|ctx| {
             if hist_len > 1 {
