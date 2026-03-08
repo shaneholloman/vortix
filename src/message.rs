@@ -167,7 +167,7 @@ pub enum Message {
     /// Toggle kill switch mode (Off → Auto → `AlwaysOn` → Off)
     ToggleKillSwitch,
 
-    // === Inline-mode openers (used by action menus) ===
+    // === Overlay / Inline-mode Actions (keyboard + action menus) ===
     /// Open profile rename overlay for the selected profile
     OpenRename,
     /// Open profile search/filter overlay

@@ -1047,6 +1047,8 @@ impl App {
             Some(crate::logger::LogLevel::Info) => "Info+Warn+Error",
             None | Some(_) => "All",
         };
+        self.logs_scroll = 0;
+        self.logs_auto_scroll = true;
         self.show_toast(format!("Log filter: {label}"), ToastType::Info);
     }
 }

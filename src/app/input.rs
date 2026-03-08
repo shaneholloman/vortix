@@ -575,11 +575,7 @@ impl App {
                         self.logs_auto_scroll = false;
                         self.logs_scroll = 0;
                     }
-                    KeyCode::Char('f') => {
-                        self.handle_message(Message::CycleLogFilter);
-                        self.logs_scroll = 0;
-                        self.logs_auto_scroll = true;
-                    }
+                    KeyCode::Char('f') => self.handle_message(Message::CycleLogFilter),
                     KeyCode::Char('L') => self.handle_message(Message::ClearLogs),
                     _ => {}
                 }
