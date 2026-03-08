@@ -505,15 +505,8 @@ impl App {
             KeyCode::F(5) => self.handle_message(Message::FocusPanel(FocusedPanel::Logs)),
 
             KeyCode::Char('K') => self.handle_message(Message::ToggleKillSwitch),
-            KeyCode::Char('?') => {
-                self.input_mode = InputMode::Help { scroll: 0 };
-            }
-            KeyCode::Char('/') => {
-                self.input_mode = InputMode::Search {
-                    query: String::new(),
-                    cursor: 0,
-                };
-            }
+            KeyCode::Char('?') => self.handle_message(Message::OpenHelp),
+            KeyCode::Char('/') => self.handle_message(Message::OpenSearch),
 
             _ => self.handle_panel_keys(key),
         }
@@ -550,35 +543,7 @@ impl App {
                 KeyCode::Char('s') => self.handle_message(Message::CycleSortOrder),
                 KeyCode::Char('a') => self.handle_message(Message::ManageAuth),
                 KeyCode::Char('A') => self.handle_message(Message::ClearAuth),
-                KeyCode::Char('R') => {
-                    if let Some(idx) = self.profile_list_state.selected() {
-                        if let Some(profile) = self.profiles.get(idx) {
-                            let active_profile = match &self.connection_state {
-                                ConnectionState::Connected { profile: p, .. }
-                                | ConnectionState::Connecting { profile: p, .. }
-                                | ConnectionState::Disconnecting { profile: p, .. } => {
-                                    Some(p.as_str())
-                                }
-                                ConnectionState::Disconnected => None,
-                            };
-                            if active_profile == Some(&profile.name) {
-                                self.show_toast(
-                                    "Cannot rename an active profile — disconnect first"
-                                        .to_string(),
-                                    ToastType::Warning,
-                                );
-                            } else {
-                                let name = profile.name.clone();
-                                let char_len = name.chars().count();
-                                self.input_mode = InputMode::Rename {
-                                    index: idx,
-                                    new_name: name,
-                                    cursor: char_len,
-                                };
-                            }
-                        }
-                    }
-                }
+                KeyCode::Char('R') => self.handle_message(Message::OpenRename),
                 _ => {}
             },
             FocusedPanel::Logs => {
@@ -610,27 +575,7 @@ impl App {
                         self.logs_auto_scroll = false;
                         self.logs_scroll = 0;
                     }
-                    KeyCode::Char('f') => {
-                        self.log_level_filter = match self.log_level_filter {
-                            None => Some(crate::logger::LogLevel::Error),
-                            Some(crate::logger::LogLevel::Error) => {
-                                Some(crate::logger::LogLevel::Warning)
-                            }
-                            Some(crate::logger::LogLevel::Warning) => {
-                                Some(crate::logger::LogLevel::Info)
-                            }
-                            _ => None,
-                        };
-                        let label = match self.log_level_filter {
-                            Some(crate::logger::LogLevel::Error) => "Errors only",
-                            Some(crate::logger::LogLevel::Warning) => "Warn+Error",
-                            Some(crate::logger::LogLevel::Info) => "Info+Warn+Error",
-                            None | Some(_) => "All",
-                        };
-                        self.show_toast(format!("Log filter: {label}"), super::ToastType::Info);
-                        self.logs_scroll = 0;
-                        self.logs_auto_scroll = true;
-                    }
+                    KeyCode::Char('f') => self.handle_message(Message::CycleLogFilter),
                     KeyCode::Char('L') => self.handle_message(Message::ClearLogs),
                     _ => {}
                 }
