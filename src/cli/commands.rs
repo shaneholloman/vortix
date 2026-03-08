@@ -247,77 +247,77 @@ mod tests {
 
     #[test]
     fn test_count_profiles_empty_dir() {
-        let dir = std::env::temp_dir().join("vortix_test_count_empty");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let (wg, ovpn) = count_profiles(&dir);
+        let (wg, ovpn) = count_profiles(dir.path());
         assert_eq!(wg, 0);
         assert_eq!(ovpn, 0);
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_count_profiles_nonexistent_dir() {
-        let dir = std::env::temp_dir().join("vortix_test_count_nodir");
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let nonexistent = dir.path().join("no_such_subdir");
 
-        let (wg, ovpn) = count_profiles(&dir);
+        let (wg, ovpn) = count_profiles(&nonexistent);
         assert_eq!(wg, 0);
         assert_eq!(ovpn, 0);
     }
 
     #[test]
     fn test_count_profiles_mixed() {
-        let dir = std::env::temp_dir().join("vortix_test_count_mixed");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
         // WireGuard profiles
-        std::fs::write(dir.join("wg0.conf"), "[Interface]").unwrap();
-        std::fs::write(dir.join("wg1.conf"), "[Interface]").unwrap();
+        std::fs::write(dir.path().join("wg0.conf"), "[Interface]").unwrap();
+        std::fs::write(dir.path().join("wg1.conf"), "[Interface]").unwrap();
         // OpenVPN profiles
-        std::fs::write(dir.join("us.ovpn"), "remote us.vpn").unwrap();
+        std::fs::write(dir.path().join("us.ovpn"), "remote us.vpn").unwrap();
         // Non-profile files (should be ignored)
-        std::fs::write(dir.join("notes.txt"), "hello").unwrap();
-        std::fs::write(dir.join("backup.bak"), "data").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "hello").unwrap();
+        std::fs::write(dir.path().join("backup.bak"), "data").unwrap();
         // Subdirectory (should be ignored)
-        std::fs::create_dir_all(dir.join("subdir")).unwrap();
+        std::fs::create_dir_all(dir.path().join("subdir")).unwrap();
 
-        let (wg, ovpn) = count_profiles(&dir);
+        let (wg, ovpn) = count_profiles(dir.path());
         assert_eq!(wg, 2);
         assert_eq!(ovpn, 1);
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // ---- handle_info output ----
 
     #[test]
     fn test_handle_info_with_profiles() {
-        let dir = std::env::temp_dir().join("vortix_test_info");
-        let _ = std::fs::remove_dir_all(&dir);
-        let profiles = dir.join("profiles");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let profiles = dir.path().join("profiles");
         std::fs::create_dir_all(&profiles).unwrap();
         std::fs::write(profiles.join("vpn.conf"), "[Interface]").unwrap();
         std::fs::write(profiles.join("us.ovpn"), "remote us.vpn").unwrap();
 
         // Should not panic and prints to stdout
-        handle_info(&dir, "default");
-
-        let _ = std::fs::remove_dir_all(&dir);
+        handle_info(dir.path(), "default");
     }
 
     #[test]
     fn test_handle_info_with_config_toml() {
-        let dir = std::env::temp_dir().join("vortix_test_info_toml");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("config.toml"), "tick_rate = 500").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        std::fs::write(dir.path().join("config.toml"), "tick_rate = 500").unwrap();
 
-        handle_info(&dir, "from --config-dir");
-
-        let _ = std::fs::remove_dir_all(&dir);
+        handle_info(dir.path(), "from --config-dir");
     }
 }

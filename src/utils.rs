@@ -751,106 +751,109 @@ mod tests {
 
     #[test]
     fn test_get_unique_path_no_collision() {
-        let dir = std::env::temp_dir().join("vortix_test_unique_nocol");
-        let _ = std::fs::create_dir_all(&dir);
-        // Clean up any previous files
-        let _ = std::fs::remove_file(dir.join("test.conf"));
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let path = get_unique_path(&dir, "test.conf");
+        let path = get_unique_path(dir.path(), "test.conf");
         assert_eq!(path.file_name().unwrap(), "test.conf");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_get_unique_path_with_collision() {
-        let dir = std::env::temp_dir().join("vortix_test_unique_col");
-        let _ = std::fs::create_dir_all(&dir);
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
         // Create the file that will collide
-        std::fs::write(dir.join("test.conf"), "existing").unwrap();
+        std::fs::write(dir.path().join("test.conf"), "existing").unwrap();
 
-        let path = get_unique_path(&dir, "test.conf");
+        let path = get_unique_path(dir.path(), "test.conf");
         assert_eq!(path.file_name().unwrap(), "test_1.conf");
 
         // Create that too
-        std::fs::write(dir.join("test_1.conf"), "also existing").unwrap();
-        let path2 = get_unique_path(&dir, "test.conf");
+        std::fs::write(dir.path().join("test_1.conf"), "also existing").unwrap();
+        let path2 = get_unique_path(dir.path(), "test.conf");
         assert_eq!(path2.file_name().unwrap(), "test_2.conf");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // === OpenVPN auth-user-pass detection tests ===
 
     #[test]
     fn test_openvpn_config_needs_auth_bare_directive() {
-        let dir = std::env::temp_dir().join("vortix_test_auth_bare");
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("test.ovpn");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.ovpn");
         std::fs::write(
             &path,
             "client\nremote example.com 1194\nauth-user-pass\ndev tun\n",
         )
         .unwrap();
         assert!(openvpn_config_needs_auth(&path));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_openvpn_config_needs_auth_bare_with_trailing_space() {
-        let dir = std::env::temp_dir().join("vortix_test_auth_trail");
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("test.ovpn");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.ovpn");
         std::fs::write(
             &path,
             "client\nremote example.com 1194\nauth-user-pass   \ndev tun\n",
         )
         .unwrap();
         assert!(openvpn_config_needs_auth(&path));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_openvpn_config_needs_auth_with_file_arg() {
-        let dir = std::env::temp_dir().join("vortix_test_auth_file");
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("test.ovpn");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.ovpn");
         std::fs::write(
             &path,
             "client\nremote example.com 1194\nauth-user-pass /etc/openvpn/creds.txt\ndev tun\n",
         )
         .unwrap();
         assert!(!openvpn_config_needs_auth(&path));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_openvpn_config_needs_auth_absent() {
-        let dir = std::env::temp_dir().join("vortix_test_auth_absent");
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("test.ovpn");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.ovpn");
         std::fs::write(
             &path,
             "client\nremote example.com 1194\ndev tun\nproto udp\n",
         )
         .unwrap();
         assert!(!openvpn_config_needs_auth(&path));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_openvpn_config_needs_auth_commented_out() {
-        let dir = std::env::temp_dir().join("vortix_test_auth_comment");
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("test.ovpn");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.ovpn");
         std::fs::write(
             &path,
             "client\nremote example.com 1194\n# auth-user-pass\n; auth-user-pass\ndev tun\n",
         )
         .unwrap();
         assert!(!openvpn_config_needs_auth(&path));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -861,34 +864,40 @@ mod tests {
 
     // === OpenVPN auth file write/read tests ===
 
+    fn set_temp_config_dir() -> tempfile::TempDir {
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_utils_test_")
+            .tempdir()
+            .unwrap();
+        crate::config::set_config_dir(dir.path().to_path_buf());
+        dir
+    }
+
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_write_read_openvpn_auth_file() {
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_roundtrip";
-        // Write
         let result = write_openvpn_auth_file(name, "myuser", "mypass");
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.exists());
 
-        // Read
         let creds = read_openvpn_saved_auth(name);
         assert!(creds.is_some());
         let (user, pass) = creds.unwrap();
         assert_eq!(user, "myuser");
         assert_eq!(pass, "mypass");
 
-        // Clean up
         delete_openvpn_auth_file(name);
         assert!(!path.exists());
     }
 
     #[cfg(unix)]
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_auth_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_perms";
         let result = write_openvpn_auth_file(name, "user", "pass");
         assert!(result.is_ok());
@@ -945,15 +954,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires root privileges for auth file permissions"]
     fn test_read_openvpn_saved_auth_empty_creds() {
+        let _tmp = set_temp_config_dir();
         let name = "test_auth_empty_creds";
-        // Write empty username
         let path = get_openvpn_auth_path(name).unwrap();
         std::fs::write(&path, "\npassword\n").unwrap();
         assert!(read_openvpn_saved_auth(name).is_none());
 
-        // Write empty password
         std::fs::write(&path, "username\n\n").unwrap();
         assert!(read_openvpn_saved_auth(name).is_none());
 

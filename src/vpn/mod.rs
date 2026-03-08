@@ -662,17 +662,16 @@ proto udp
 
     #[test]
     fn test_import_profile_unsupported_extension() {
-        // Create a temp file with wrong extension
-        let temp_dir = std::env::temp_dir();
-        let path = temp_dir.join("test.txt");
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("test.txt");
         std::fs::write(&path, "test content").unwrap();
 
         let result = import_profile(&path);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unsupported file type"));
-
-        // Cleanup
-        let _ = std::fs::remove_file(&path);
     }
 
     // === Extended config parsing edge cases ===
