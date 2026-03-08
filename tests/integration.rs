@@ -21,10 +21,15 @@ static INIT: Once = Once::new();
 
 fn init_test_env() {
     INIT.call_once(|| {
-        let test_config =
-            std::env::temp_dir().join(format!("vortix_integration_test_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&test_config);
-        vortix::config::set_config_dir(test_config);
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_integration_test_")
+            .tempdir()
+            .expect("failed to create test temp dir");
+        let path = dir.path().to_path_buf();
+        // Leak intentionally: shared across all tests in this module via Once
+        std::mem::forget(dir);
+        let _ = std::fs::create_dir_all(&path);
+        vortix::config::set_config_dir(path);
     });
 }
 
@@ -474,9 +479,12 @@ mod killswitch_lifecycle {
 mod profile_import {
     use super::*;
 
-    fn create_temp_profile(name: &str, content: &str, ext: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join("vortix_import_tests");
-        let _ = std::fs::create_dir_all(&dir);
+    fn create_temp_profile(
+        dir: &std::path::Path,
+        name: &str,
+        content: &str,
+        ext: &str,
+    ) -> std::path::PathBuf {
         let path = dir.join(format!("{name}.{ext}"));
         std::fs::write(&path, content).unwrap();
         path
@@ -484,7 +492,12 @@ mod profile_import {
 
     #[test]
     fn import_valid_wireguard_profile() {
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
         let path = create_temp_profile(
+            tmp.path(),
             "valid-wg",
             "[Interface]\nPrivateKey = abc123=\nAddress = 10.0.0.1/24\n\n[Peer]\nPublicKey = xyz789=\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 0.0.0.0/0\n",
             "conf",
@@ -500,7 +513,12 @@ mod profile_import {
 
     #[test]
     fn import_valid_openvpn_profile() {
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
         let path = create_temp_profile(
+            tmp.path(),
             "valid-ovpn",
             "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n<ca>\n-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n</ca>\n",
             "ovpn",
@@ -524,7 +542,11 @@ mod profile_import {
 
     #[test]
     fn import_empty_file() {
-        let path = create_temp_profile("empty", "", "conf");
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
+        let path = create_temp_profile(tmp.path(), "empty", "", "conf");
         let result = vortix::vpn::import_profile(&path);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty"));
@@ -532,7 +554,11 @@ mod profile_import {
 
     #[test]
     fn import_unsupported_extension() {
-        let path = create_temp_profile("bad-ext", "some content", "txt");
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
+        let path = create_temp_profile(tmp.path(), "bad-ext", "some content", "txt");
         let result = vortix::vpn::import_profile(&path);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unsupported"));
@@ -540,7 +566,12 @@ mod profile_import {
 
     #[test]
     fn import_malformed_wireguard_missing_interface() {
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
         let path = create_temp_profile(
+            tmp.path(),
             "bad-wg",
             "[Peer]\nPublicKey = xyz789=\nEndpoint = 1.2.3.4:51820\n",
             "conf",
@@ -551,7 +582,16 @@ mod profile_import {
 
     #[test]
     fn import_malformed_openvpn_only_remote() {
-        let path = create_temp_profile("bad-ovpn", "remote vpn.example.com 1194\n", "ovpn");
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_import_")
+            .tempdir()
+            .unwrap();
+        let path = create_temp_profile(
+            tmp.path(),
+            "bad-ovpn",
+            "remote vpn.example.com 1194\n",
+            "ovpn",
+        );
         let result = vortix::vpn::import_profile(&path);
         assert!(
             result.is_err(),
@@ -561,10 +601,11 @@ mod profile_import {
 
     #[test]
     fn import_directory_with_mixed_files() {
-        let dir =
-            std::env::temp_dir().join(format!("vortix_bulk_import_test_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_bulk_import_")
+            .tempdir()
+            .unwrap();
+        let dir = tmp.path();
 
         std::fs::write(
             dir.join("good.conf"),
@@ -593,10 +634,11 @@ mod profile_import {
 
     #[test]
     fn import_empty_directory_keeps_overlay_open() {
-        let dir =
-            std::env::temp_dir().join(format!("vortix_empty_import_test_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_empty_import_")
+            .tempdir()
+            .unwrap();
+        let dir = tmp.path();
 
         std::fs::write(dir.join("readme.txt"), "not a config").unwrap();
 

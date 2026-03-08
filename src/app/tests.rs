@@ -7,10 +7,15 @@ fn init_test_env() {
     use std::sync::Once;
     static INIT: Once = Once::new();
     INIT.call_once(|| {
-        let test_config =
-            std::env::temp_dir().join(format!("vortix_unit_test_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&test_config);
-        crate::config::set_config_dir(test_config);
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_unit_test_")
+            .tempdir()
+            .expect("failed to create test temp dir");
+        let path = dir.path().to_path_buf();
+        // Leak intentionally: shared across all tests in this module via Once
+        std::mem::forget(dir);
+        let _ = std::fs::create_dir_all(&path);
+        crate::config::set_config_dir(path);
     });
 }
 
@@ -58,7 +63,7 @@ fn test_app() -> App {
         terminal_size: (80, 24),
         is_root: false,
         config: crate::config::AppConfig::default(),
-        config_dir: std::env::temp_dir().join("vortix_test"),
+        config_dir: std::env::temp_dir().join(format!("vortix_test_{}", std::process::id())),
         connection_drops: 0,
         pending_connect: None,
         sort_order: crate::state::ProfileSortOrder::default(),
@@ -662,9 +667,8 @@ fn test_quick_connect_from_disconnected() {
 // ====================================================================
 
 /// Helper: add `OpenVPN` profiles with a temp config file containing auth-user-pass.
-fn add_openvpn_profiles_with_auth(app: &mut App, names: &[&str]) {
-    let dir = std::env::temp_dir().join("vortix_test_auth_profiles");
-    let _ = std::fs::create_dir_all(&dir);
+fn add_openvpn_profiles_with_auth(app: &mut App, names: &[&str], dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(dir);
     for name in names {
         let config_path = dir.join(format!("{name}.ovpn"));
         std::fs::write(
@@ -683,9 +687,8 @@ fn add_openvpn_profiles_with_auth(app: &mut App, names: &[&str]) {
 }
 
 /// Helper: add `OpenVPN` profiles WITHOUT auth-user-pass.
-fn add_openvpn_profiles_no_auth(app: &mut App, names: &[&str]) {
-    let dir = std::env::temp_dir().join("vortix_test_noauth_profiles");
-    let _ = std::fs::create_dir_all(&dir);
+fn add_openvpn_profiles_no_auth(app: &mut App, names: &[&str], dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(dir);
     for name in names {
         let config_path = dir.join(format!("{name}.ovpn"));
         std::fs::write(
@@ -706,7 +709,11 @@ fn add_openvpn_profiles_no_auth(app: &mut App, names: &[&str]) {
 #[test]
 fn test_auth_prompt_shown_for_openvpn_with_auth_user_pass() {
     let mut app = test_app();
-    add_openvpn_profiles_with_auth(&mut app, &["auth-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_auth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_with_auth(&mut app, &["auth-vpn"], tmp.path());
     app.is_root = true;
 
     crate::utils::delete_openvpn_auth_file("auth-vpn");
@@ -727,7 +734,11 @@ fn test_auth_prompt_shown_for_openvpn_with_auth_user_pass() {
 #[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_prompt_skipped_when_creds_saved() {
     let mut app = test_app();
-    add_openvpn_profiles_with_auth(&mut app, &["saved-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_auth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_with_auth(&mut app, &["saved-vpn"], tmp.path());
     app.is_root = true;
 
     let _ = crate::utils::write_openvpn_auth_file("saved-vpn", "user", "pass");
@@ -763,7 +774,11 @@ fn test_auth_prompt_skipped_for_wireguard() {
 #[test]
 fn test_auth_prompt_skipped_for_openvpn_without_auth_directive() {
     let mut app = test_app();
-    add_openvpn_profiles_no_auth(&mut app, &["noauth-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_noauth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_no_auth(&mut app, &["noauth-vpn"], tmp.path());
     app.is_root = true;
 
     app.connect_profile(0);
@@ -782,7 +797,11 @@ fn test_auth_prompt_skipped_for_openvpn_without_auth_directive() {
 #[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_submit_triggers_connect() {
     let mut app = test_app();
-    add_openvpn_profiles_with_auth(&mut app, &["submit-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_auth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_with_auth(&mut app, &["submit-vpn"], tmp.path());
     app.is_root = true;
 
     crate::utils::delete_openvpn_auth_file("submit-vpn");
@@ -813,7 +832,11 @@ fn test_auth_submit_triggers_connect() {
 #[test]
 fn test_auth_cancel_returns_to_normal() {
     let mut app = test_app();
-    add_openvpn_profiles_with_auth(&mut app, &["cancel-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_auth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_with_auth(&mut app, &["cancel-vpn"], tmp.path());
     app.is_root = true;
 
     crate::utils::delete_openvpn_auth_file("cancel-vpn");
@@ -875,7 +898,11 @@ fn test_auth_field_switching() {
 #[ignore = "requires root privileges for auth file permissions"]
 fn test_auth_delete_profile_cleans_auth_file() {
     let mut app = test_app();
-    add_openvpn_profiles_with_auth(&mut app, &["del-vpn"]);
+    let tmp = tempfile::Builder::new()
+        .prefix("vortix_auth_")
+        .tempdir()
+        .unwrap();
+    add_openvpn_profiles_with_auth(&mut app, &["del-vpn"], tmp.path());
     app.profile_list_state.select(Some(0));
 
     let auth_path = crate::utils::write_openvpn_auth_file("del-vpn", "user", "pass").unwrap();
@@ -1158,12 +1185,12 @@ fn test_search_filter_no_match_keeps_selection() {
 fn test_open_config_caches_content_and_close_clears() {
     let mut app = test_app();
 
-    let tmp = std::env::temp_dir().join("vortix_test_config.conf");
-    std::fs::write(&tmp, "[Interface]\nAddress = 10.0.0.1/24").unwrap();
+    let tmp = tempfile::Builder::new().suffix(".conf").tempfile().unwrap();
+    std::fs::write(tmp.path(), "[Interface]\nAddress = 10.0.0.1/24").unwrap();
     app.profiles.push(VpnProfile {
         name: "test-vpn".to_string(),
         protocol: Protocol::WireGuard,
-        config_path: tmp.clone(),
+        config_path: tmp.path().to_path_buf(),
         location: "Test".to_string(),
         last_used: None,
     });
@@ -1187,8 +1214,6 @@ fn test_open_config_caches_content_and_close_clears() {
         app.cached_config_content.is_none(),
         "Cached content should be cleared on close"
     );
-
-    let _ = std::fs::remove_file(tmp);
 }
 
 #[test]

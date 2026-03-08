@@ -510,34 +510,34 @@ mod tests {
 
     #[test]
     fn test_load_config_missing_file() {
-        let dir = std::env::temp_dir().join("vortix_test_no_config");
-        let _ = std::fs::create_dir_all(&dir);
-        let _ = std::fs::remove_file(dir.join("config.toml"));
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let config = load_config(&dir).unwrap();
+        let config = load_config(dir.path()).unwrap();
         assert_eq!(config.tick_rate, 1000);
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_load_config_partial() {
-        let dir = std::env::temp_dir().join("vortix_test_partial_config");
-        let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("config.toml"), "tick_rate = 500\n").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        std::fs::write(dir.path().join("config.toml"), "tick_rate = 500\n").unwrap();
 
-        let config = load_config(&dir).unwrap();
+        let config = load_config(dir.path()).unwrap();
         assert_eq!(config.tick_rate, 500);
         assert_eq!(config.telemetry_poll_rate, 30); // default preserved
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_load_config_full_toml() {
-        let dir = std::env::temp_dir().join("vortix_test_full_config");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
         let toml_content = r#"
 tick_rate = 250
@@ -550,9 +550,9 @@ ipv6_check_apis = ["https://example.com/v6"]
 ip_api_primary = "https://custom-api.example.com/json"
 ip_api_fallbacks = ["https://fallback1.example.com"]
 "#;
-        std::fs::write(dir.join("config.toml"), toml_content).unwrap();
+        std::fs::write(dir.path().join("config.toml"), toml_content).unwrap();
 
-        let config = load_config(&dir).unwrap();
+        let config = load_config(dir.path()).unwrap();
         assert_eq!(config.tick_rate, 250);
         assert_eq!(config.telemetry_poll_rate, 60);
         assert_eq!(config.api_timeout, 10);
@@ -565,38 +565,39 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
             config.ip_api_fallbacks,
             vec!["https://fallback1.example.com"]
         );
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_load_config_invalid_toml() {
-        let dir = std::env::temp_dir().join("vortix_test_bad_config");
-        let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("config.toml"), "tick_rate = [invalid\n").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        std::fs::write(dir.path().join("config.toml"), "tick_rate = [invalid\n").unwrap();
 
-        assert!(load_config(&dir).is_err());
-
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(load_config(dir.path()).is_err());
     }
 
     #[test]
     fn test_load_config_unknown_field() {
-        let dir = std::env::temp_dir().join("vortix_test_unknown_field");
-        let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("config.toml"), "nonexistent_field = true\n").unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        std::fs::write(dir.path().join("config.toml"), "nonexistent_field = true\n").unwrap();
 
-        assert!(load_config(&dir).is_err());
-
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(load_config(dir.path()).is_err());
     }
 
     // ---- resolve_config_dir ----
 
     #[test]
     fn test_resolve_config_dir_with_override() {
-        let custom = std::env::temp_dir().join("vortix_test_resolve_override");
-        let _ = std::fs::remove_dir_all(&custom);
+        let tmp = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
+        let custom = tmp.path().join("override_subdir");
 
         // Directory should not exist yet
         assert!(!custom.exists());
@@ -607,8 +608,6 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
         assert_eq!(result, expected);
         // resolve_config_dir must create the directory
         assert!(custom.is_dir());
-
-        let _ = std::fs::remove_dir_all(&custom);
     }
 
     #[test]
@@ -638,11 +637,13 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
 
     #[test]
     fn test_copy_dir_recursive() {
-        let base = std::env::temp_dir().join("vortix_test_copy_dir");
-        let _ = std::fs::remove_dir_all(&base);
+        let base = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let src = base.join("src_dir");
-        let dst = base.join("dst_dir");
+        let src = base.path().join("src_dir");
+        let dst = base.path().join("dst_dir");
 
         // Build a nested source tree:
         //   src_dir/
@@ -667,19 +668,19 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
             std::fs::read_to_string(dst.join("sub").join("file_b.txt")).unwrap(),
             "beta"
         );
-
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     // ---- migrate_data ----
 
     #[test]
     fn test_migrate_data_moves_items() {
-        let base = std::env::temp_dir().join("vortix_test_migrate");
-        let _ = std::fs::remove_dir_all(&base);
+        let base = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let old = base.join("old");
-        let new = base.join("new");
+        let old = base.path().join("old");
+        let new = base.path().join("new");
 
         // Seed old directory with profiles dir and a metadata file
         std::fs::create_dir_all(old.join("profiles")).unwrap();
@@ -704,17 +705,17 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
         // Source items should be gone (renamed away)
         assert!(!old.join("profiles").exists());
         assert!(!old.join("metadata.json").exists());
-
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn test_migrate_data_merges_into_empty_dirs() {
-        let base = std::env::temp_dir().join("vortix_test_migrate_empty");
-        let _ = std::fs::remove_dir_all(&base);
+        let base = tempfile::Builder::new()
+            .prefix("vortix_test_")
+            .tempdir()
+            .unwrap();
 
-        let old = base.join("old");
-        let new = base.join("new");
+        let old = base.path().join("old");
+        let new = base.path().join("new");
 
         // Seed old directory with profiles
         std::fs::create_dir_all(old.join("profiles")).unwrap();
@@ -743,7 +744,5 @@ ip_api_fallbacks = ["https://fallback1.example.com"]
 
         // Source should be gone
         assert!(!old.join("profiles").join("vpn.conf").exists());
-
-        let _ = std::fs::remove_dir_all(&base);
     }
 }
