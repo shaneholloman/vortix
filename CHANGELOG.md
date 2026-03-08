@@ -11,65 +11,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 
-- **ci:** Resolve Clippy and test failures on CI
-- Address Copilot review feedback (8 items)
-- Spurious "VPN dropped" auto-reconnect on force-kill
-- Add scrolling to help overlay
-- Isolate tests from real config dir + block mouse passthrough on overlays
-- P0 critical fixes — config viewer I/O, min terminal size, search/rename cursor
-- Address Copilot review on PR #89
-- Address Copilot review on PR #91
-- Address Copilot review on PR #92
-- Address Copilot review on PR #93
-- Resolve all 6 P0 critical issues (#95, #96, #97, #98, #99, #100)
-- Address Copilot review on PR #121
-- P1 UX improvements and test safety (#104, #103, #102, #115)
-- Enable mouse scroll in config viewer overlay
-- Address Copilot review on PR #125
-- Remove throughput chart empty state
-- Restore original chart arrows and disconnected indicator
-- Restore header connected indicator and sidebar numbering
-- Hardening round 2 — import UX, security, input routing, quit guard
-- Address Copilot review comments on PR #140
-- Address second round of Copilot review comments
-- Verify WireGuard handshake before declaring Connected ([#31](https://github.com/Harry-kp/vortix/pull/31))
-- Remove scanner handshake guard causing reconnect loops
-- Address Copilot review — auth mask chars, chart x-bound constant
-- Enable 6 previously-ignored auth tests to run without root
-- Sync action menus with actual panel capabilities
-- Address Copilot review — log filter consistency, comment wording
+- Fix `pkill openvpn` killing all system OpenVPN processes instead of only Vortix-managed ones ([#95](https://github.com/Harry-kp/vortix/issues/95))
+- Fix kill switch state file written to world-readable `/tmp/` ([#96](https://github.com/Harry-kp/vortix/issues/96))
+- Fix kill switch displaying "Blocking" without root, giving a false sense of security ([#97](https://github.com/Harry-kp/vortix/issues/97))
+- Fix Unicode text input causing panic in text field handlers ([#98](https://github.com/Harry-kp/vortix/issues/98))
+- Add `Drop` impl on `App` to clean up kill switch rules and VPN processes on panic ([#99](https://github.com/Harry-kp/vortix/issues/99))
+- Fix disconnect failure leaving app in "Disconnected" state while VPN process may still be running ([#100](https://github.com/Harry-kp/vortix/issues/100))
+- Fix spurious "VPN dropped" auto-reconnect triggered by force-kill
+- Fix config viewer overlay not loading file contents on open
+- Fix minimum terminal size check causing blank screen on small terminals
+- Fix search and rename cursor position on multi-byte UTF-8 input
+- Fix mouse events passing through overlays to background panels
+- Fix help overlay not being scrollable
+- Fix ISP and location text truncated too aggressively on narrow terminals ([#104](https://github.com/Harry-kp/vortix/issues/104))
+- Fix connection details panel mostly empty when disconnected ([#102](https://github.com/Harry-kp/vortix/issues/102))
+- Fix import overlay closing immediately on URL import or empty directory
+- Fix `g`/`G`/Home/End keys not routing correctly when logs panel is focused
+- Fix mouse scroll not working on hovered panel (only worked on focused panel)
+- Fix profile names overflowing sidebar column when names are long
+- Fix password mask using byte count instead of character count for multi-byte input
+- Enable config viewer overlay to be scrollable with mouse
+- Fix action menus not listing all available panel actions (Sort, Rename, Filter, Kill Switch)
 
 ### Features
 
-- V0.2.0 + v0.3.0 — refactor, reliability, and UX overhaul
-- P1 group A — duration format, throughput labels, connected badge, stale data
-- P1 group B — accessibility, panel shortcuts, context footer, log filtering
-- P2 group A — protocol in cockpit, DNS detail, expanded protocol badge
-- P2 group B — confirm switch dialog, syntax highlight & scan timestamp already done
-- P3 nice-to-have — profile sorting, latency thresholds
-- Extracted duplicate function calls, quality threshold exists in one place
+- Add human-readable connection duration format (e.g., "2h 15m" instead of seconds)
+- Add throughput chart with upload/download speed labels and color legend ([#103](https://github.com/Harry-kp/vortix/issues/103))
+- Add active connection badge (checkmark) next to connected profile in sidebar
+- Clear stale telemetry data on disconnect to avoid showing previous session info
+- Add keyboard accessibility for all panels with Tab/Shift+Tab cycling
+- Add panel-specific keyboard shortcuts displayed in context footer
+- Add log level filtering (Error/Warn/Info) with `f` key
+- Show protocol tag (WG/OVPN) in cockpit header bar when connected
+- Show DNS server provider name (Cloudflare, Google, Quad9) in security panel
+- Add confirmation dialog when switching profiles while connected
+- Add confirmation dialog when quitting with an active VPN connection
+- Add profile sorting (name, protocol, last used) with `s` key
+- Add connection quality thresholds (Poor/Fair/Excellent) based on latency, jitter, and packet loss
+- Move toast notifications from bottom-right to top-right for better visibility
 
 ### Refactor
 
-- Extract shared confirm dialog component
-- Split dashboard.rs into per-panel modules ([#114](https://github.com/Harry-kp/vortix/pull/114))
-- Adopt tempfile crate for panic-safe test cleanup ([#116](https://github.com/Harry-kp/vortix/pull/116))
+- Split 2081-line `dashboard.rs` into 13 focused per-panel modules ([#114](https://github.com/Harry-kp/vortix/issues/114))
+- Extract shared confirmation dialog component to reduce code duplication
+- Adopt `tempfile` crate for panic-safe test cleanup across all 31 test sites ([#116](https://github.com/Harry-kp/vortix/issues/116))
+- Sanitize profile names with strict ASCII-only validation for process management
+- Consolidate confirmation dialog input handling into shared `handle_confirm_keys`
+- Route inline key handlers (rename, search, help, log filter) through Message dispatch for TEA consistency
 
 ### Testing
 
-- Add coverage for review comment fixes
+- Enable 6 previously-ignored auth tests to run without root privileges
+- Add 19 new tests covering confirm dialog keys, Home/End panel awareness, profile name sanitization, truncation edge cases, and import overlay behavior
+- Migrate all test temp file creation to `tempfile` crate for automatic cleanup on panic
 
-### Ci
+### CI
 
 - Pin Rust 1.91.0 in CI and fix remaining lint issues
-
-### Revert
-
-- Remove WireGuard handshake polling that broke connections
-
-### Ui
-
-- Move toast notification from bottom-right to top-right
 
 
 
@@ -199,5 +197,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config files stored with 600 permissions
 - Root privilege requirement for network interface management
 
-[Unreleased]: https://github.com/Harry-kp/vortix/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Harry-kp/vortix/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Harry-kp/vortix/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/Harry-kp/vortix/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/Harry-kp/vortix/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/Harry-kp/vortix/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/Harry-kp/vortix/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/Harry-kp/vortix/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Harry-kp/vortix/releases/tag/v0.1.0
