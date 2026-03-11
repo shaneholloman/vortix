@@ -11,13 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 
-- Implement v0.1.7 "Dependable" milestone issues
-- Address Copilot review comments on PR #150
+- Fix Escape/CloseOverlay resetting zoomed panel back to normal layout ([#105](https://github.com/Harry-kp/vortix/issues/105))
+- Fix sidebar "Reconnect" action disconnecting instead of reconnecting the selected profile ([#106](https://github.com/Harry-kp/vortix/issues/106), [#145](https://github.com/Harry-kp/vortix/issues/145))
+- Fix exponential backoff overflow causing infinite retry delays at high attempt counts ([#110](https://github.com/Harry-kp/vortix/issues/110))
+- Fix renaming a profile breaking reconnect by not updating `last_connected_profile` ([#111](https://github.com/Harry-kp/vortix/issues/111))
+- Fix deleting a profile during Connecting or Disconnecting state causing state corruption ([#112](https://github.com/Harry-kp/vortix/issues/112))
+- Fix "IP unchanged" warning flooding logs every telemetry poll cycle while connected ([#113](https://github.com/Harry-kp/vortix/issues/113))
+- Fix 0ms latency falsely showing EXCELLENT quality instead of UNKNOWN ([#146](https://github.com/Harry-kp/vortix/issues/146))
+
+### Features
+
+- Add `ConnectSelected` action: sidebar `r` key now connects the highlighted profile rather than the last-used one
+- Add `Unknown` quality state when no metrics have arrived yet, displayed as "─────" in header and "UNKNOWN" in details
+- Include latency in connection quality scoring (Poor ≥ 300ms, Fair ≥ 100ms)
+- Cap retry backoff at configurable `connect_retry_max_delay_secs` (default 300s)
 
 ### Documentation
 
-- Rewrite ROADMAP with product-vision themed releases
-- Rewrite ROADMAP as a product journey, not a bug list
+- Rewrite ROADMAP as a product journey with themed releases and user stories
 
 ### Miscellaneous
 
@@ -215,7 +226,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config files stored with 600 permissions
 - Root privilege requirement for network interface management
 
-[Unreleased]: https://github.com/Harry-kp/vortix/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Harry-kp/vortix/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Harry-kp/vortix/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Harry-kp/vortix/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Harry-kp/vortix/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Harry-kp/vortix/compare/v0.1.3...v0.1.4
