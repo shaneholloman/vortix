@@ -83,24 +83,13 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
                 format!("▲{:02}:{:02}", elapsed / 60, elapsed % 60)
             };
 
-            // Connection quality indicator
-            let quality_indicator = if app.latency_ms > 0 {
-                match QualityLevel::from_metrics(app.packet_loss, app.jitter_ms) {
+            let quality_indicator =
+                match QualityLevel::from_metrics(app.latency_ms, app.packet_loss, app.jitter_ms) {
+                    QualityLevel::Unknown => ("─────", theme::TEXT_SECONDARY),
                     QualityLevel::Poor => ("●●○○○", theme::NORD_RED),
                     QualityLevel::Fair => ("●●●○○", theme::NORD_YELLOW),
-                    QualityLevel::Excellent => {
-                        if app.latency_ms < 50 {
-                            ("●●●●●", theme::NORD_GREEN)
-                        } else if app.latency_ms < 150 {
-                            ("●●●●○", theme::NORD_GREEN)
-                        } else {
-                            ("●●●○○", theme::NORD_YELLOW)
-                        }
-                    }
-                }
-            } else {
-                ("─────", theme::TEXT_SECONDARY)
-            };
+                    QualityLevel::Excellent => ("●●●●●", theme::NORD_GREEN),
+                };
 
             let proto_tag = app
                 .profiles

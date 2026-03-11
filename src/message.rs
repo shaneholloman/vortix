@@ -60,6 +60,8 @@ pub enum Message {
     Disconnect,
     /// Reconnect to last profile
     Reconnect,
+    /// Connect the currently selected sidebar profile
+    ConnectSelected,
     /// Connect to quick slot (0-8)
     QuickConnect(usize),
 
@@ -209,8 +211,8 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
             });
             actions.push(ActionMenuItem {
                 key: "r",
-                label: "Reconnect Selected",
-                message: Message::Reconnect,
+                label: "Reconnect",
+                message: Message::ConnectSelected,
             });
             actions.push(ActionMenuItem {
                 key: "v",
@@ -293,7 +295,7 @@ pub fn get_bulk_actions() -> Vec<ActionMenuItem> {
         },
         ActionMenuItem {
             key: "r",
-            label: "Reconnect All",
+            label: "Reconnect Last",
             message: Message::Reconnect,
         },
         ActionMenuItem {

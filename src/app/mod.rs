@@ -89,6 +89,8 @@ pub struct App {
     pub real_dns: Option<String>,
     /// When the last security telemetry update was received.
     pub last_security_check: Option<Instant>,
+    /// Suppresses duplicate "IP unchanged" warnings after the first per session.
+    pub ip_unchanged_warned: bool,
     /// Name of the last successfully connected profile (for reconnect from Disconnected).
     pub last_connected_profile: Option<String>,
     /// Scroll position for logs panel (logs stored in logger module)
@@ -190,6 +192,7 @@ impl App {
             real_ip: None,
             real_dns: None,
             last_security_check: None,
+            ip_unchanged_warned: false,
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
@@ -372,6 +375,7 @@ impl App {
             real_ip: None,
             real_dns: None,
             last_security_check: None,
+            ip_unchanged_warned: false,
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,

@@ -37,6 +37,8 @@ pub const DEFAULT_DISCONNECT_TIMEOUT: u64 = 30;
 pub const DEFAULT_CONNECT_MAX_RETRIES: u32 = 3;
 /// Default base delay (seconds) for exponential backoff: delay = base * 2^(attempt-1).
 pub const DEFAULT_CONNECT_RETRY_BASE_DELAY_SECS: u64 = 2;
+/// Maximum retry delay (seconds) to prevent exponential backoff from growing unbounded.
+pub const DEFAULT_CONNECT_RETRY_MAX_DELAY_SECS: u64 = 300;
 /// Whether to automatically reconnect after unexpected VPN drops (default: true).
 pub const DEFAULT_AUTO_RECONNECT: bool = true;
 /// Default delay (seconds) before auto-reconnecting after a network change.

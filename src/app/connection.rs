@@ -501,6 +501,7 @@ impl App {
         self.packet_loss = 0.0;
         self.jitter_ms = 0;
         self.last_security_check = None;
+        self.ip_unchanged_warned = false;
         self.current_down = 0;
         self.current_up = 0;
 

@@ -43,6 +43,7 @@ fn test_app() -> App {
         real_ip: None,
         real_dns: None,
         last_security_check: None,
+        ip_unchanged_warned: false,
         last_connected_profile: None,
         logs_scroll: 0,
         logs_auto_scroll: true,
@@ -1214,6 +1215,21 @@ fn test_open_config_caches_content_and_close_clears() {
 }
 
 #[test]
+fn test_close_overlay_preserves_zoom() {
+    let mut app = test_app();
+    app.zoomed_panel = Some(FocusedPanel::Logs);
+    app.show_action_menu = true;
+
+    app.handle_message(Message::CloseOverlay);
+    assert!(!app.show_action_menu);
+    assert_eq!(
+        app.zoomed_panel,
+        Some(FocusedPanel::Logs),
+        "Zoom should be preserved when closing overlay"
+    );
+}
+
+#[test]
 fn test_search_match_count_updated() {
     let mut app = test_app();
     add_profiles(&mut app, &["amsterdam", "ankara", "berlin"]);
@@ -1586,5 +1602,169 @@ fn test_end_in_logs_enables_auto_scroll() {
     assert!(
         app.logs_auto_scroll,
         "End in Logs should re-enable auto-scroll"
+    );
+}
+
+#[test]
+fn test_rename_updates_last_connected_profile() {
+    let mut app = test_app();
+    let dir = tempfile::tempdir().unwrap();
+    let conf_path = dir.path().join("old-name.conf");
+    std::fs::write(&conf_path, "dummy").unwrap();
+    app.profiles.push(VpnProfile {
+        name: "old-name".to_string(),
+        protocol: Protocol::WireGuard,
+        config_path: conf_path,
+        location: String::new(),
+        last_used: None,
+    });
+    app.profile_list_state.select(Some(0));
+    app.last_connected_profile = Some("old-name".to_string());
+
+    app.rename_profile(0, "new-name");
+    assert_eq!(
+        app.last_connected_profile.as_deref(),
+        Some("new-name"),
+        "Rename should update last_connected_profile"
+    );
+}
+
+#[test]
+fn test_rename_updates_connected_state() {
+    let mut app = test_app();
+    let dir = tempfile::tempdir().unwrap();
+    let conf_path = dir.path().join("active-vpn.conf");
+    std::fs::write(&conf_path, "dummy").unwrap();
+    app.profiles.push(VpnProfile {
+        name: "active-vpn".to_string(),
+        protocol: Protocol::WireGuard,
+        config_path: conf_path,
+        location: String::new(),
+        last_used: None,
+    });
+    app.profile_list_state.select(Some(0));
+    app.connection_state = ConnectionState::Connected {
+        profile: "active-vpn".to_string(),
+        server_location: "Test".to_string(),
+        since: Instant::now(),
+        latency_ms: 0,
+        details: Box::new(DetailedConnectionInfo::default()),
+    };
+
+    app.rename_profile(0, "renamed-vpn");
+    if let ConnectionState::Connected { profile, .. } = &app.connection_state {
+        assert_eq!(
+            profile, "renamed-vpn",
+            "Rename should update connection_state profile name"
+        );
+    } else {
+        panic!("Should still be connected");
+    }
+}
+
+#[test]
+fn test_ip_unchanged_warning_fires_once() {
+    use crate::core::telemetry::TelemetryUpdate;
+    let mut app = test_app();
+    app.connection_state = ConnectionState::Connected {
+        profile: "test".to_string(),
+        server_location: "Test".to_string(),
+        since: Instant::now(),
+        latency_ms: 0,
+        details: Box::new(DetailedConnectionInfo::default()),
+    };
+    app.public_ip = "1.2.3.4".to_string();
+
+    app.handle_message(Message::Telemetry(TelemetryUpdate::PublicIp(
+        "1.2.3.4".to_string(),
+    )));
+    assert!(app.ip_unchanged_warned, "First warning should fire");
+
+    let warned_before = app.ip_unchanged_warned;
+    app.handle_message(Message::Telemetry(TelemetryUpdate::PublicIp(
+        "1.2.3.4".to_string(),
+    )));
+    assert!(
+        warned_before && app.ip_unchanged_warned,
+        "Second identical IP should not change the warning state"
+    );
+}
+
+#[test]
+fn test_cannot_delete_connecting_profile() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["my-vpn"]);
+    app.profile_list_state.select(Some(0));
+    app.connection_state = ConnectionState::Connecting {
+        profile: "my-vpn".to_string(),
+        started: Instant::now(),
+    };
+
+    app.request_delete(0);
+    assert!(
+        !matches!(app.input_mode, InputMode::ConfirmDelete { .. }),
+        "Should not open confirm dialog for a connecting profile"
+    );
+}
+
+#[test]
+fn test_cannot_delete_disconnecting_profile() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["my-vpn"]);
+    app.profile_list_state.select(Some(0));
+    app.connection_state = ConnectionState::Disconnecting {
+        profile: "my-vpn".to_string(),
+        started: Instant::now(),
+    };
+
+    app.request_delete(0);
+    assert!(
+        !matches!(app.input_mode, InputMode::ConfirmDelete { .. }),
+        "Should not open confirm dialog for a disconnecting profile"
+    );
+}
+
+#[test]
+fn test_connect_selected_targets_sidebar_selection() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["alpha", "beta"]);
+    app.profile_list_state.select(Some(1));
+
+    // Verify ConnectSelected dispatches toggle_connection for the selected index.
+    // Transition to Disconnecting first so toggle_connection queues pending_connect.
+    app.connection_state = ConnectionState::Disconnecting {
+        profile: "alpha".to_string(),
+        started: Instant::now(),
+    };
+    app.handle_message(Message::ConnectSelected);
+    assert_eq!(
+        app.pending_connect,
+        Some(1),
+        "ConnectSelected should queue the sidebar-selected profile (index 1)"
+    );
+}
+
+#[test]
+fn test_connect_selected_reconnects_active_profile() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["alpha", "beta"]);
+    app.profile_list_state.select(Some(0));
+    app.connection_state = ConnectionState::Connected {
+        profile: "alpha".to_string(),
+        server_location: "Test".to_string(),
+        since: Instant::now(),
+        latency_ms: 0,
+        details: Box::new(DetailedConnectionInfo::default()),
+    };
+
+    app.handle_message(Message::ConnectSelected);
+    assert_eq!(
+        app.pending_connect,
+        Some(0),
+        "ConnectSelected on active profile should queue reconnect"
+    );
+    assert!(
+        matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
+        "Should start disconnecting for reconnect"
     );
 }

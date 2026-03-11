@@ -190,6 +190,7 @@ pub struct Toast {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum QualityLevel {
     #[default]
+    Unknown,
     Excellent,
     Fair,
     Poor,
@@ -197,10 +198,13 @@ pub enum QualityLevel {
 
 impl QualityLevel {
     #[must_use]
-    pub fn from_metrics(packet_loss: f32, jitter_ms: u64) -> Self {
-        if packet_loss >= 5.0 || jitter_ms >= 15 {
+    pub fn from_metrics(latency_ms: u64, packet_loss: f32, jitter_ms: u64) -> Self {
+        if latency_ms == 0 && packet_loss == 0.0 && jitter_ms == 0 {
+            return Self::Unknown;
+        }
+        if packet_loss >= 5.0 || jitter_ms >= 15 || latency_ms >= 300 {
             Self::Poor
-        } else if packet_loss >= 1.0 || jitter_ms >= 5 {
+        } else if packet_loss >= 1.0 || jitter_ms >= 5 || latency_ms >= 100 {
             Self::Fair
         } else {
             Self::Excellent
@@ -213,5 +217,43 @@ impl Toast {
     #[must_use]
     pub fn is_expired(&self) -> bool {
         Instant::now() > self.expires
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quality_unknown_when_all_zero() {
+        assert_eq!(QualityLevel::from_metrics(0, 0.0, 0), QualityLevel::Unknown);
+    }
+
+    #[test]
+    fn quality_excellent_low_metrics() {
+        assert_eq!(
+            QualityLevel::from_metrics(30, 0.0, 2),
+            QualityLevel::Excellent
+        );
+    }
+
+    #[test]
+    fn quality_fair_moderate_latency() {
+        assert_eq!(QualityLevel::from_metrics(150, 0.0, 0), QualityLevel::Fair);
+    }
+
+    #[test]
+    fn quality_poor_high_latency() {
+        assert_eq!(QualityLevel::from_metrics(400, 0.0, 0), QualityLevel::Poor);
+    }
+
+    #[test]
+    fn quality_poor_high_packet_loss() {
+        assert_eq!(QualityLevel::from_metrics(20, 6.0, 1), QualityLevel::Poor);
+    }
+
+    #[test]
+    fn quality_fair_moderate_jitter() {
+        assert_eq!(QualityLevel::from_metrics(20, 0.0, 8), QualityLevel::Fair);
     }
 }
