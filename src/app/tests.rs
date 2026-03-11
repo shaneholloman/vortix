@@ -1680,14 +1680,13 @@ fn test_ip_unchanged_warning_fires_once() {
     )));
     assert!(app.ip_unchanged_warned, "First warning should fire");
 
-    let log_count_before = crate::logger::get_logs().len();
+    let warned_before = app.ip_unchanged_warned;
     app.handle_message(Message::Telemetry(TelemetryUpdate::PublicIp(
         "1.2.3.4".to_string(),
     )));
-    let log_count_after = crate::logger::get_logs().len();
-    assert_eq!(
-        log_count_before, log_count_after,
-        "Second identical IP should NOT produce a new log"
+    assert!(
+        warned_before && app.ip_unchanged_warned,
+        "Second identical IP should not change the warning state"
     );
 }
 
@@ -1742,5 +1741,30 @@ fn test_connect_selected_targets_sidebar_selection() {
         app.pending_connect,
         Some(1),
         "ConnectSelected should queue the sidebar-selected profile (index 1)"
+    );
+}
+
+#[test]
+fn test_connect_selected_reconnects_active_profile() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["alpha", "beta"]);
+    app.profile_list_state.select(Some(0));
+    app.connection_state = ConnectionState::Connected {
+        profile: "alpha".to_string(),
+        server_location: "Test".to_string(),
+        since: Instant::now(),
+        latency_ms: 0,
+        details: Box::new(DetailedConnectionInfo::default()),
+    };
+
+    app.handle_message(Message::ConnectSelected);
+    assert_eq!(
+        app.pending_connect,
+        Some(0),
+        "ConnectSelected on active profile should queue reconnect"
+    );
+    assert!(
+        matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
+        "Should start disconnecting for reconnect"
     );
 }

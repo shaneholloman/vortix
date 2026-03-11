@@ -94,7 +94,19 @@ impl App {
             Message::Reconnect => self.reconnect(),
             Message::ConnectSelected => {
                 if let Some(idx) = self.profile_list_state.selected() {
-                    self.toggle_connection(idx);
+                    let target = self.profiles.get(idx).map(|p| p.name.clone());
+                    match (&self.connection_state, target) {
+                        (ConnectionState::Connected { profile, .. }, Some(name))
+                            if *profile == name =>
+                        {
+                            self.pending_connect = Some(idx);
+                            self.disconnect();
+                        }
+                        (_, Some(_)) => {
+                            self.toggle_connection(idx);
+                        }
+                        _ => {}
+                    }
                 }
             }
             Message::QuickConnect(idx) => {
