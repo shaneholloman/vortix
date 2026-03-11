@@ -86,6 +86,8 @@ pub struct AppConfig {
     /// Base delay in seconds for exponential backoff between retries.
     /// Actual delay = base × 2^(attempt−1), i.e. 2s, 4s, 8s for base=2.
     pub connect_retry_base_delay_secs: u64,
+    /// Maximum delay in seconds for retry backoff (prevents unbounded growth).
+    pub connect_retry_max_delay_secs: u64,
     /// Automatically reconnect to the last VPN when the connection drops unexpectedly.
     pub auto_reconnect: bool,
     /// Seconds to wait after detecting a network change before auto-reconnecting.
@@ -125,6 +127,7 @@ impl Default for AppConfig {
             openvpn_verbosity: constants::DEFAULT_OVPN_VERBOSITY.to_string(),
             connect_max_retries: constants::DEFAULT_CONNECT_MAX_RETRIES,
             connect_retry_base_delay_secs: constants::DEFAULT_CONNECT_RETRY_BASE_DELAY_SECS,
+            connect_retry_max_delay_secs: constants::DEFAULT_CONNECT_RETRY_MAX_DELAY_SECS,
             auto_reconnect: constants::DEFAULT_AUTO_RECONNECT,
             auto_reconnect_delay_secs: constants::DEFAULT_AUTO_RECONNECT_DELAY_SECS,
         }

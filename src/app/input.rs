@@ -492,7 +492,13 @@ impl App {
             KeyCode::Char('8') => self.handle_message(Message::QuickConnect(7)),
             KeyCode::Char('9') => self.handle_message(Message::QuickConnect(8)),
             KeyCode::Char('d') => self.handle_message(Message::Disconnect),
-            KeyCode::Char('r') => self.handle_message(Message::Reconnect),
+            KeyCode::Char('r') => {
+                if self.focused_panel == FocusedPanel::Sidebar {
+                    self.handle_message(Message::ConnectSelected);
+                } else {
+                    self.handle_message(Message::Reconnect);
+                }
+            }
             KeyCode::Char('i') => self.handle_message(Message::OpenImport),
             KeyCode::Char('y') => self.handle_message(Message::CopyIp),
 

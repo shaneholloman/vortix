@@ -38,19 +38,18 @@ impl App {
     /// Request deletion of a profile (Safety Check)
     pub(crate) fn request_delete(&mut self, idx: usize) {
         if let Some(profile) = self.profiles.get(idx) {
-            // 1. Prevent deleting connected profile
-            if let ConnectionState::Connected {
-                profile: connected_name,
-                ..
-            } = &self.connection_state
-            {
-                if &profile.name == connected_name {
-                    self.show_toast(
-                        "Cannot delete active profile".to_string(),
-                        ToastType::Warning,
-                    );
-                    return;
-                }
+            let active_profile = match &self.connection_state {
+                ConnectionState::Connected { profile: p, .. }
+                | ConnectionState::Connecting { profile: p, .. }
+                | ConnectionState::Disconnecting { profile: p, .. } => Some(p.as_str()),
+                ConnectionState::Disconnected => None,
+            };
+            if active_profile == Some(&profile.name) {
+                self.show_toast(
+                    "Cannot delete active profile — disconnect first".to_string(),
+                    ToastType::Warning,
+                );
+                return;
             }
 
             // 2. Switch to confirm mode
@@ -66,6 +65,24 @@ impl App {
     pub(crate) fn confirm_delete(&mut self, idx: usize) {
         if idx >= self.profiles.len() {
             return;
+        }
+
+        // Safety net: state may have changed since the confirm dialog opened
+        if let Some(profile) = self.profiles.get(idx) {
+            let active_profile = match &self.connection_state {
+                ConnectionState::Connected { profile: p, .. }
+                | ConnectionState::Connecting { profile: p, .. }
+                | ConnectionState::Disconnecting { profile: p, .. } => Some(p.as_str()),
+                ConnectionState::Disconnected => None,
+            };
+            if active_profile == Some(&profile.name) {
+                self.show_toast(
+                    "Cannot delete — profile became active".to_string(),
+                    ToastType::Warning,
+                );
+                self.input_mode = InputMode::Normal;
+                return;
+            }
         }
 
         // Get profile info before removing
@@ -144,6 +161,16 @@ impl App {
 
             self.profiles[idx].name = new_name.to_string();
             self.profiles[idx].config_path = new_file;
+
+            if self.last_connected_profile.as_deref() == Some(&old_name) {
+                self.last_connected_profile = Some(new_name.to_string());
+            }
+
+            if let ConnectionState::Connected { profile, .. } = &mut self.connection_state {
+                if *profile == old_name {
+                    *profile = new_name.to_string();
+                }
+            }
 
             if matches!(self.profiles[idx].protocol, Protocol::OpenVPN) {
                 if let Some(auth) = utils::read_openvpn_saved_auth(&old_name) {

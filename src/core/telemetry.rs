@@ -954,6 +954,7 @@ Inter-|   Receive                                                |  Transmit
             openvpn_verbosity: "3".to_string(),
             connect_max_retries: 3,
             connect_retry_base_delay_secs: 2,
+            connect_retry_max_delay_secs: 300,
             auto_reconnect: true,
             auto_reconnect_delay_secs: 3,
         };

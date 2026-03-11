@@ -92,6 +92,11 @@ impl App {
                 }
             }
             Message::Reconnect => self.reconnect(),
+            Message::ConnectSelected => {
+                if let Some(idx) = self.profile_list_state.selected() {
+                    self.toggle_connection(idx);
+                }
+            }
             Message::QuickConnect(idx) => {
                 if idx < self.profiles.len() {
                     self.profile_list_state.select(Some(idx));
@@ -124,7 +129,6 @@ impl App {
                 self.cached_config_content = None;
                 self.show_action_menu = false;
                 self.show_bulk_menu = false;
-                self.zoomed_panel = None;
                 self.input_mode = InputMode::Normal;
             }
             Message::OpenActionMenu => {
@@ -390,7 +394,9 @@ impl App {
 
                 let base = self.config.connect_retry_base_delay_secs;
                 let shift = (attempt - 1).min(63);
-                let delay_secs = base.saturating_mul(1u64 << shift);
+                let delay_secs = base
+                    .saturating_mul(1u64 << shift)
+                    .min(self.config.connect_retry_max_delay_secs);
 
                 self.log(&format!(
                     "RETRY: Attempt {attempt}/{max_retries} for '{profile}' in {delay_secs}s..."
@@ -552,11 +558,14 @@ impl App {
                     }
                     self.real_ip = Some(ip.clone());
                 } else if self.public_ip != ip && self.public_ip != constants::MSG_FETCHING {
+                    self.ip_unchanged_warned = false;
                     self.log(&format!("NET: Public IP changed {old_ip} -> {ip}"));
                 } else if is_connected
                     && self.public_ip == ip
                     && self.public_ip != constants::MSG_FETCHING
+                    && !self.ip_unchanged_warned
                 {
+                    self.ip_unchanged_warned = true;
                     self.log(&format!(
                         "WARN: Public IP unchanged ({ip}) while connected — possible leak or split-tunnel"
                     ));

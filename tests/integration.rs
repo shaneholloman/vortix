@@ -736,7 +736,11 @@ mod message_routing {
         assert!(!app.show_config);
         assert!(!app.show_action_menu);
         assert!(!app.show_bulk_menu);
-        assert!(app.zoomed_panel.is_none());
+        assert_eq!(
+            app.zoomed_panel,
+            Some(FocusedPanel::Chart),
+            "CloseOverlay must preserve zoom state"
+        );
         assert_eq!(app.input_mode, InputMode::Normal);
     }
 

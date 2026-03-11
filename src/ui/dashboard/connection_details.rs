@@ -146,11 +146,13 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         text.push(Line::from(""));
 
         // Row 6: Quality Metrics (Unified high-density)
-        let quality_status = match QualityLevel::from_metrics(app.packet_loss, app.jitter_ms) {
-            QualityLevel::Poor => ("POOR", theme::NORD_RED),
-            QualityLevel::Fair => ("FAIR", theme::NORD_YELLOW),
-            QualityLevel::Excellent => ("EXCELLENT", theme::NORD_GREEN),
-        };
+        let quality_status =
+            match QualityLevel::from_metrics(app.latency_ms, app.packet_loss, app.jitter_ms) {
+                QualityLevel::Unknown => ("UNKNOWN", theme::TEXT_SECONDARY),
+                QualityLevel::Poor => ("POOR", theme::NORD_RED),
+                QualityLevel::Fair => ("FAIR", theme::NORD_YELLOW),
+                QualityLevel::Excellent => ("EXCELLENT", theme::NORD_GREEN),
+            };
 
         text.push(Line::from(vec![
             Span::styled("Quality: ", Style::default().fg(theme::TEXT_SECONDARY)),
