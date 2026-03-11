@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-03-11
+
+### Bug Fixes
+
+- Implement v0.1.7 "Dependable" milestone issues
+- Address Copilot review comments on PR #150
+
+### Documentation
+
+- Rewrite ROADMAP with product-vision themed releases
+- Rewrite ROADMAP as a product journey, not a bug list
+
+### Miscellaneous
+
+- **deps:** Bump the rust-minor group with 3 updates ([#149](https://github.com/Harry-kp/vortix/pull/149))
+
+
+
 ## [0.1.6] - 2026-03-08
 
 ### Bug Fixes
