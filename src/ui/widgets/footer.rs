@@ -9,9 +9,13 @@ use ratatui::{
     Frame,
 };
 
-/// Render dashboard footer with context-aware shortcuts
+/// Render dashboard footer with context-aware shortcuts.
+///
+/// Hints are split into two groups: context-specific (truncatable on narrow
+/// terminals) and critical (always visible). `render_hints` reserves space
+/// for critical hints before laying out context-specific ones, so `?` (Help)
+/// and `q` (Quit) never disappear — even on 60-column terminals.
 pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
-    // Config overlay takes priority
     if app.show_config {
         let hints = vec![
             ("↑↓", "Scroll"),
@@ -19,11 +23,10 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
             ("G", "End"),
             ("Esc", "Close"),
         ];
-        render_hints(frame, area, &hints, None);
+        render_hints(frame, area, &hints, &[], None);
         return;
     }
 
-    // Determine focused panel name for display
     let panel_name = match &app.focused_panel {
         crate::app::FocusedPanel::Sidebar => "Profiles",
         crate::app::FocusedPanel::ConnectionDetails => "Details",
@@ -32,11 +35,11 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
         crate::app::FocusedPanel::Logs => "Logs",
     };
 
-    let mut hints = Vec::new();
+    let mut context_hints = Vec::new();
 
     match &app.focused_panel {
         crate::app::FocusedPanel::Sidebar => {
-            hints.extend_from_slice(&[
+            context_hints.extend_from_slice(&[
                 ("j/k", "Navigate"),
                 ("c", "Connect"),
                 ("v", "View Config"),
@@ -46,7 +49,7 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
             ]);
         }
         crate::app::FocusedPanel::Logs => {
-            hints.extend_from_slice(&[
+            context_hints.extend_from_slice(&[
                 ("j/k", "Scroll"),
                 ("g/G", "Top/End"),
                 ("f", "Filter"),
@@ -56,7 +59,7 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
         crate::app::FocusedPanel::Chart
         | crate::app::FocusedPanel::Security
         | crate::app::FocusedPanel::ConnectionDetails => {
-            hints.push(("z", "Zoom"));
+            context_hints.push(("z", "Zoom"));
         }
     }
 
@@ -73,80 +76,144 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
         }
     };
     if !disconnect_hint.0.is_empty() {
-        hints.push(disconnect_hint);
+        context_hints.push(disconnect_hint);
     }
 
-    hints.extend_from_slice(&[
+    let critical_hints = [
         ("Tab", "Panel"),
         ("K", "KillSw"),
         ("?", "Help"),
         ("q", "Quit"),
-    ]);
+    ];
 
-    render_hints(frame, area, &hints, Some(panel_name));
+    render_hints(
+        frame,
+        area,
+        &context_hints,
+        &critical_hints,
+        Some(panel_name),
+    );
 }
 
-fn render_hints(frame: &mut Frame, area: Rect, hints: &[(&str, &str)], panel_name: Option<&str>) {
-    use ratatui::layout::{Constraint, Layout};
+/// Render hint spans for one group, appending to `spans`.
+/// Returns the number of characters consumed.
+fn push_hint_spans(
+    spans: &mut Vec<Span<'static>>,
+    hints: &[(&str, &str)],
+    budget: usize,
+    current_width: usize,
+    needs_leading_sep: bool,
+) -> usize {
+    let mut used = 0;
+    for (i, (key, action)) in hints.iter().enumerate() {
+        let need_sep = needs_leading_sep || i > 0;
+        let sep_width = if need_sep { 3 } else { 0 };
+        let item_width = key.len() + 1 + action.len() + sep_width;
 
-    let chunks = Layout::default()
-        .direction(ratatui::layout::Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),     // Hints (left)
-            Constraint::Length(16), // Branding (right)
-        ])
-        .split(area);
+        if current_width + used + item_width > budget {
+            break;
+        }
 
-    // 1. Render hints on the left with optional panel indicator
-    let mut hint_spans = Vec::new();
-    let mut current_width = 0;
-    let max_width = chunks[0].width as usize;
-
-    if let Some(panel) = panel_name {
-        let panel_indicator = format!("[{panel}] ");
-        hint_spans.push(Span::styled(
-            panel_indicator.clone(),
+        if need_sep {
+            spans.push(Span::styled(
+                " │ ",
+                Style::default().fg(crate::theme::SEPARATOR),
+            ));
+        }
+        spans.push(Span::styled(
+            (*key).to_string(),
             Style::default()
                 .fg(crate::theme::KEY_HINT)
                 .add_modifier(Modifier::BOLD),
         ));
-        current_width += panel_indicator.len();
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(
+            (*action).to_string(),
+            Style::default().fg(crate::theme::KEY_HINT_DESC),
+        ));
+
+        used += item_width;
+    }
+    used
+}
+
+/// Lay out footer hints so that `critical_hints` (Help, Quit, etc.) are always
+/// visible at the end, and `context_hints` fill the remaining space — truncating
+/// gracefully when the terminal is narrow.
+fn render_hints(
+    frame: &mut Frame,
+    area: Rect,
+    context_hints: &[(&str, &str)],
+    critical_hints: &[(&str, &str)],
+    panel_name: Option<&str>,
+) {
+    use ratatui::layout::{Constraint, Layout};
+
+    let chunks = Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(16)])
+        .split(area);
+
+    let max_width = chunks[0].width as usize;
+    let mut hint_spans: Vec<Span<'static>> = Vec::new();
+    let mut current_width: usize = 0;
+
+    // Panel indicator
+    if let Some(panel) = panel_name {
+        let indicator = format!("[{panel}] ");
+        current_width += indicator.len();
+        hint_spans.push(Span::styled(
+            indicator,
+            Style::default()
+                .fg(crate::theme::KEY_HINT)
+                .add_modifier(Modifier::BOLD),
+        ));
     } else {
         hint_spans.push(Span::raw(" "));
         current_width += 1;
     }
 
-    for (i, (key, action)) in hints.iter().enumerate() {
-        let sep_width = if i > 0 { 3 } else { 0 };
-        let item_width = key.len() + 1 + action.len() + sep_width;
+    // Reserve width for critical hints so they are never truncated
+    let critical_width: usize = critical_hints
+        .iter()
+        .enumerate()
+        .map(|(i, (k, a))| {
+            let sep = if i > 0 { 3 } else { 0 };
+            k.len() + 1 + a.len() + sep
+        })
+        .sum();
+    // Extra separator between the two groups
+    let group_sep = if !context_hints.is_empty() && !critical_hints.is_empty() {
+        3
+    } else {
+        0
+    };
+    let reserved = critical_width + group_sep;
 
-        if current_width + item_width > max_width {
-            break;
-        }
+    // Context hints fill whatever space is left after reserving for critical
+    let context_budget = max_width.saturating_sub(reserved);
+    let context_used = push_hint_spans(
+        &mut hint_spans,
+        context_hints,
+        context_budget,
+        current_width,
+        false,
+    );
+    current_width += context_used;
 
-        if i > 0 {
-            hint_spans.push(Span::styled(
-                " │ ",
-                Style::default().fg(crate::theme::SEPARATOR),
-            ));
-        }
-        hint_spans.push(Span::styled(
-            *key,
-            Style::default()
-                .fg(crate::theme::KEY_HINT)
-                .add_modifier(Modifier::BOLD),
-        ));
-        hint_spans.push(Span::raw(" "));
-        hint_spans.push(Span::styled(
-            *action,
-            Style::default().fg(crate::theme::KEY_HINT_DESC),
-        ));
+    // Critical hints — always rendered
+    let has_context = context_used > 0;
+    push_hint_spans(
+        &mut hint_spans,
+        critical_hints,
+        max_width,
+        current_width,
+        has_context,
+    );
 
-        current_width += item_width;
-    }
     frame.render_widget(Paragraph::new(Line::from(hint_spans)), chunks[0]);
 
-    // 2. Render branding on the right
+    // Branding
     let branding = Line::from(vec![Span::styled(
         format!(
             "{} v{} ",

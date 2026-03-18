@@ -305,7 +305,25 @@ impl App {
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 if let Some(panel) = self.panel_at(mouse.column, mouse.row) {
-                    self.handle_message(Message::FocusPanel(panel));
+                    self.handle_message(Message::FocusPanel(panel.clone()));
+
+                    if matches!(panel, crate::app::FocusedPanel::Sidebar)
+                        && !self.profiles.is_empty()
+                    {
+                        if let Some(area) = self.panel_areas.get(&crate::app::FocusedPanel::Sidebar)
+                        {
+                            let inner_y = area.y + 1; // skip top border
+                            let inner_h = area.height.saturating_sub(2);
+                            if mouse.row >= inner_y && mouse.row < inner_y + inner_h {
+                                let row_in_view = (mouse.row - inner_y) as usize;
+                                let scroll_offset = self.profile_list_state.offset();
+                                let idx = scroll_offset + row_in_view;
+                                if idx < self.profiles.len() {
+                                    self.profile_list_state.select(Some(idx));
+                                }
+                            }
+                        }
+                    }
                 }
             }
             _ => {}

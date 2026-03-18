@@ -273,6 +273,7 @@ impl App {
                         Ok(path) => {
                             let path_string = path.to_string_lossy().to_string();
                             let _ = tx.send(Message::Import(path_string));
+                            crate::core::downloader::cleanup_temp_download(&path);
                         }
                         Err(e) => {
                             let _ = tx.send(Message::Toast(

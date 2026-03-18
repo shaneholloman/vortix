@@ -38,11 +38,22 @@ pub fn render(frame: &mut Frame, name: &str, cursor: usize) {
     frame.render_widget(block, overlay);
 
     let before: String = name.chars().take(cursor).collect();
-    let after: String = name.chars().skip(cursor).collect();
+    let cursor_char: String = name
+        .chars()
+        .nth(cursor)
+        .map_or_else(|| "\u{2588}".to_string(), |c| c.to_string());
+    let after: String = name.chars().skip(cursor + 1).collect();
+
     let mut spans = vec![
         Span::styled("> ", Style::default().fg(theme::ACCENT_PRIMARY)),
         Span::styled(before, Style::default().fg(theme::TEXT_PRIMARY)),
-        Span::styled("▌", Style::default().fg(theme::ACCENT_PRIMARY)),
+        Span::styled(
+            cursor_char,
+            Style::default()
+                .fg(theme::ACCENT_SECONDARY)
+                .add_modifier(Modifier::REVERSED)
+                .add_modifier(Modifier::SLOW_BLINK),
+        ),
     ];
     if !after.is_empty() {
         spans.push(Span::styled(

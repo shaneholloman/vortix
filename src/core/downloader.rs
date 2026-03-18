@@ -159,6 +159,20 @@ pub fn download_profile(url: &str) -> Result<PathBuf, String> {
     Ok(target_path)
 }
 
+/// Remove a temp file left over from a URL download.
+/// Logs on failure but never propagates errors — the import already succeeded.
+pub fn cleanup_temp_download(path: &std::path::Path) {
+    if path.exists() && path.starts_with(std::env::temp_dir()) {
+        if let Err(e) = std::fs::remove_file(path) {
+            logger::log(
+                LogLevel::Warning,
+                "DOWNLOAD",
+                format!("Failed to clean up temp file {}: {e}", path.display()),
+            );
+        }
+    }
+}
+
 /// Extract filename from URL path
 ///
 /// # Limitations

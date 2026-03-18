@@ -45,8 +45,8 @@ fn handle_import(file: &str) {
             println!("{}", constants::CLI_MSG_DOWNLOADING);
             match crate::core::downloader::download_profile(&url) {
                 Ok(downloaded_path) => {
-                    // The downloaded path is a temp file
                     import_single_file(&downloaded_path);
+                    crate::core::downloader::cleanup_temp_download(&downloaded_path);
                 }
                 Err(e) => {
                     eprintln!("{}{}", constants::CLI_MSG_IMPORT_FAILED, e);

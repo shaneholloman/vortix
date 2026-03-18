@@ -195,15 +195,25 @@ impl App {
         #[cfg(target_os = "linux")]
         {
             use std::io::Write;
-            // Try xclip first, then xsel
-            for cmd in &["xclip", "xsel"] {
-                let args: &[&str] = if *cmd == "xclip" {
-                    &["-selection", "clipboard"]
-                } else {
-                    &["--clipboard", "--input"]
-                };
+            // Wayland-first: try wl-copy when $WAYLAND_DISPLAY is set,
+            // then fall back to X11 tools (xclip, xsel).
+            let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
+            let tools: &[(&str, &[&str])] = if is_wayland {
+                &[
+                    ("wl-copy", &[]),
+                    ("xclip", &["-selection", "clipboard"]),
+                    ("xsel", &["--clipboard", "--input"]),
+                ]
+            } else {
+                &[
+                    ("xclip", &["-selection", "clipboard"]),
+                    ("xsel", &["--clipboard", "--input"]),
+                    ("wl-copy", &[]),
+                ]
+            };
+            for (cmd, args) in tools {
                 if let Ok(mut child) = std::process::Command::new(cmd)
-                    .args(args)
+                    .args(*args)
                     .stdin(std::process::Stdio::piped())
                     .spawn()
                 {

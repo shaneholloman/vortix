@@ -200,6 +200,7 @@ pub const OVPN_LOG_ERRORS: &[&str] = &[
     "Cannot open TUN/TAP",
     "ERROR:",
     "Exiting due to fatal error",
+    "Options error",
 ];
 /// Polling interval for `OpenVPN` log file (milliseconds).
 pub const OVPN_LOG_POLL_MS: u64 = 500;

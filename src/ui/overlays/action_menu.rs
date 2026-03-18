@@ -4,8 +4,8 @@
 
 use crate::message::ActionMenuItem;
 use crate::theme;
+use crate::ui::helpers::centered_rect_fixed;
 use ratatui::{
-    layout::{Constraint, Flex, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState},
@@ -26,7 +26,7 @@ pub fn render(
     let menu_width = (max_key_len + max_label_len + 8).min(60) as u16; // key + padding + label
     let menu_height = (items.len().max(1) + 2).min(15) as u16; // items + borders
 
-    let area = centered_rect(menu_width, menu_height, frame.area());
+    let area = centered_rect_fixed(menu_width, menu_height, frame.area());
 
     // Clear background
     frame.render_widget(Clear, area);
@@ -80,14 +80,4 @@ pub fn render(
             .highlight_symbol("▶ ");
         frame.render_stateful_widget(list, inner, list_state);
     }
-}
-
-/// Create a centered rectangle with fixed dimensions
-fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
-    let vertical = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center);
-
-    let [area] = vertical.areas(area);
-    let [area] = horizontal.areas(area);
-    area
 }
