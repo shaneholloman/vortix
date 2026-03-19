@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-03-19
+
+### Bug Fixes
+
+- Implement v0.1.8 "Polished & Consistent" milestone
+- Address Copilot review comments on PR #157
+- Use map_or instead of map().unwrap_or() to satisfy clippy
+- Wrap long log messages instead of truncating them
+- Toast messages now logged at correct severity level
+- Indent wrapped log continuation lines to align with message column
+- Compute continuation indent per-entry based on actual category width
+- Widen LOG_CATEGORY_WIDTH to 9 so all messages align in one column
+- Auto-scroll now shows latest log entries correctly
+- Use Paragraph::line_count() for exact wrapped line count
+
+### Miscellaneous
+
+- **deps:** Bump the rust-minor group with 2 updates ([#152](https://github.com/Harry-kp/vortix/pull/152))
+
+### Refactor
+
+- Use Paragraph::wrap() for log wrapping, move PREFIX_WIDTH to constants
+
+### Testing
+
+- Add unit tests for cleanup_temp_download, footer hints, centered_rect, and theme aliases
+
+
+
 ## [0.1.7] - 2026-03-11
 
 ### Bug Fixes
