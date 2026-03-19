@@ -203,3 +203,44 @@ pub const BTN_DEFAULT_BG: Color = SYNTHWAVE.btn_default_bg;
 pub const KEY_HINT: Color = SYNTHWAVE.key_hint;
 pub const KEY_HINT_DESC: Color = SYNTHWAVE.key_hint_desc;
 pub const SEPARATOR: Color = SYNTHWAVE.separator;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_returns_synthwave() {
+        let t = current();
+        assert_eq!(t.accent_primary, SYNTHWAVE.accent_primary);
+        assert_eq!(t.error, SYNTHWAVE.error);
+        assert_eq!(t.toast_info, SYNTHWAVE.toast_info);
+    }
+
+    #[test]
+    fn const_aliases_match_theme_fields() {
+        assert_eq!(ACCENT_PRIMARY, SYNTHWAVE.accent_primary);
+        assert_eq!(ACCENT_SECONDARY, SYNTHWAVE.accent_secondary);
+        assert_eq!(EMERALD, SYNTHWAVE.success);
+        assert_eq!(CORAL_RED, SYNTHWAVE.error);
+        assert_eq!(AMBER, SYNTHWAVE.warning);
+        assert_eq!(YELLOW, SYNTHWAVE.yellow);
+        assert_eq!(NORD_YELLOW, SYNTHWAVE.yellow);
+        assert_eq!(PANEL_BG, SYNTHWAVE.panel_bg);
+        assert_eq!(TEXT_WHITE, SYNTHWAVE.text_primary);
+        assert_eq!(BORDER_DEFAULT, SYNTHWAVE.border_default);
+        assert_eq!(BORDER_FOCUSED, SYNTHWAVE.border_focused);
+        assert_eq!(KEY_HINT, SYNTHWAVE.key_hint);
+        assert_eq!(SEPARATOR, SYNTHWAVE.separator);
+    }
+
+    #[test]
+    fn nord_legacy_aliases_consistent() {
+        assert_eq!(NORD_GREEN, SYNTHWAVE.success);
+        assert_eq!(NORD_RED, SYNTHWAVE.error);
+        assert_eq!(NORD_FROST_2, SYNTHWAVE.accent_primary);
+        assert_eq!(NORD_FROST_3, SYNTHWAVE.nord_frost_3);
+        assert_eq!(NORD_PURPLE, SYNTHWAVE.nord_purple);
+        assert_eq!(NORD_POLAR_NIGHT_3, SYNTHWAVE.nord_polar_night_3);
+        assert_eq!(NORD_POLAR_NIGHT_4, SYNTHWAVE.nord_polar_night_4);
+    }
+}

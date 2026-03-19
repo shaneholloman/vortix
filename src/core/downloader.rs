@@ -276,4 +276,31 @@ mod tests {
                 || result.contains("ovpn")
         );
     }
+
+    #[test]
+    fn cleanup_removes_temp_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("vortix-test-cleanup.ovpn");
+        std::fs::write(&path, "test").unwrap();
+        assert!(path.exists());
+        cleanup_temp_download(&path);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn cleanup_ignores_non_temp_path() {
+        let dir = std::env::current_dir().unwrap();
+        let path = dir.join("vortix-test-cleanup-nontmp.ovpn");
+        std::fs::write(&path, "test").unwrap();
+        assert!(path.exists());
+        cleanup_temp_download(&path);
+        assert!(path.exists(), "file outside temp dir must not be deleted");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn cleanup_noop_on_missing_file() {
+        let path = std::env::temp_dir().join("vortix-nonexistent-file.ovpn");
+        cleanup_temp_download(&path); // should not panic
+    }
 }

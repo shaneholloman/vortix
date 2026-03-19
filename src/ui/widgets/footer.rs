@@ -230,3 +230,55 @@ fn render_hints(
         chunks[1],
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hint_width_ascii_no_sep() {
+        assert_eq!(hint_display_width("q", "Quit", false), 6); // "q Quit"
+    }
+
+    #[test]
+    fn hint_width_ascii_with_sep() {
+        // " │ " (3 display cols) + "q Quit" (6) = 9
+        assert_eq!(hint_display_width("q", "Quit", true), 9);
+    }
+
+    #[test]
+    fn hint_width_unicode_arrows() {
+        // "↑↓" is 2 display columns, "Scroll" is 6, space is 1 → 9
+        assert_eq!(hint_display_width("↑↓", "Scroll", false), 9);
+    }
+
+    #[test]
+    fn push_spans_respects_budget() {
+        let hints: &[(&str, &str)] = &[("a", "AAA"), ("b", "BBB"), ("c", "CCC")];
+        let mut spans = Vec::new();
+        // budget only fits first item: "a AAA" = 5 cols
+        let used = push_hint_spans(&mut spans, hints, 8, 0, false);
+        assert_eq!(used, 5);
+        assert_eq!(spans.len(), 3); // key + space + action
+    }
+
+    #[test]
+    fn push_spans_empty_on_zero_budget() {
+        let hints: &[(&str, &str)] = &[("q", "Quit")];
+        let mut spans = Vec::new();
+        let used = push_hint_spans(&mut spans, hints, 0, 0, false);
+        assert_eq!(used, 0);
+        assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn push_spans_includes_separator() {
+        let hints: &[(&str, &str)] = &[("a", "A"), ("b", "B")];
+        let mut spans = Vec::new();
+        let used = push_hint_spans(&mut spans, hints, 100, 0, false);
+        // "a A" (3) + " │ " (3) + "b B" (3) = 9
+        assert_eq!(used, 9);
+        // first: key+space+action (3), sep (1), second: key+space+action (3) = 7
+        assert_eq!(spans.len(), 7);
+    }
+}
