@@ -106,12 +106,19 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    // Estimate total visual lines after wrapping
-    let total_visual_lines: usize = all_logs
+    // Compute total visual lines after word-wrapping.
+    // Word wrapping can waste columns at each break (splitting at word boundaries),
+    // so we add +1 per wrapped line to avoid underestimating.
+    let total_visual_lines: usize = lines
         .iter()
-        .map(|e| {
-            let content_width = constants::LOG_PREFIX_WIDTH + e.message.len();
-            content_width.div_ceil(panel_width)
+        .map(|line| {
+            let w = line.width();
+            let base = w.div_ceil(panel_width).max(1);
+            if w > panel_width {
+                base + 1
+            } else {
+                base
+            }
         })
         .sum();
 
