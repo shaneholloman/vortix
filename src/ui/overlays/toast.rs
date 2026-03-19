@@ -41,27 +41,12 @@ pub fn render(frame: &mut Frame, app: &App) {
 
         frame.render_widget(Clear, toast_area);
 
+        let t = crate::theme::current();
         let (title, bg_color, border_color) = match toast.toast_type {
-            crate::state::ToastType::Info => (
-                " INFO ",
-                Color::Rgb(136, 192, 208),
-                Color::Rgb(136, 192, 208),
-            ),
-            crate::state::ToastType::Success => (
-                " SUCCESS ",
-                Color::Rgb(163, 190, 140),
-                Color::Rgb(163, 190, 140),
-            ),
-            crate::state::ToastType::Warning => (
-                " WARNING ",
-                Color::Rgb(235, 203, 139),
-                Color::Rgb(235, 203, 139),
-            ),
-            crate::state::ToastType::Error => (
-                " ERROR ",
-                Color::Rgb(191, 97, 106),
-                Color::Rgb(191, 97, 106),
-            ),
+            crate::state::ToastType::Info => (" INFO ", t.toast_info, t.toast_info),
+            crate::state::ToastType::Success => (" SUCCESS ", t.toast_success, t.toast_success),
+            crate::state::ToastType::Warning => (" WARNING ", t.toast_warning, t.toast_warning),
+            crate::state::ToastType::Error => (" ERROR ", t.toast_error, t.toast_error),
         };
 
         let block = Block::default()

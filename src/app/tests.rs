@@ -47,6 +47,7 @@ fn test_app() -> App {
         last_connected_profile: None,
         logs_scroll: 0,
         logs_auto_scroll: true,
+        logs_max_scroll: 0,
         log_level_filter: None,
         focused_panel: FocusedPanel::Sidebar,
         zoomed_panel: None,
@@ -1766,5 +1767,98 @@ fn test_connect_selected_reconnects_active_profile() {
     assert!(
         matches!(app.connection_state, ConnectionState::Disconnecting { .. }),
         "Should start disconnecting for reconnect"
+    );
+}
+
+// ── rename_profile path-traversal validation ─────────────────────────────
+
+fn setup_rename_app() -> App {
+    let mut app = test_app();
+    add_profiles(&mut app, &["existing-vpn"]);
+    app.profile_list_state.select(Some(0));
+    app
+}
+
+fn assert_rename_rejected(app: &App) {
+    assert_eq!(
+        app.profiles[0].name, "existing-vpn",
+        "name should be unchanged"
+    );
+    let toast_msg = app.toast.as_ref().map_or("", |t| t.message.as_str());
+    assert!(
+        toast_msg.contains("Invalid name"),
+        "should produce validation warning toast, got: {toast_msg:?}"
+    );
+}
+
+#[test]
+fn rename_rejects_empty_name() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "   ");
+    assert_rename_rejected(&app);
+}
+
+#[test]
+fn rename_rejects_forward_slash() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "../etc/passwd");
+    assert_rename_rejected(&app);
+}
+
+#[test]
+fn rename_rejects_backslash() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "..\\windows\\system32");
+    assert_rename_rejected(&app);
+}
+
+#[test]
+fn rename_rejects_dot_dot_traversal() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "foo..bar");
+    assert_rename_rejected(&app);
+}
+
+#[test]
+fn rename_rejects_hidden_file_prefix() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, ".hidden");
+    assert_rename_rejected(&app);
+}
+
+#[test]
+fn rename_accepts_valid_alphanumeric() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "my-vpn-2024");
+    // Name changes only if the filesystem rename succeeds; in tests there
+    // is no real file, so the rename may fail at the fs level — but the
+    // validation itself must NOT reject a valid name (no early return).
+    // We verify the validator didn't fire a warning toast.
+    let last_toast = app.toast.as_ref().map(|t| t.message.clone());
+    assert!(
+        !last_toast.as_deref().unwrap_or("").contains("Invalid name"),
+        "Valid name should not trigger validation error"
+    );
+}
+
+#[test]
+fn rename_accepts_unicode_name() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "日本-VPN");
+    let last_toast = app.toast.as_ref().map(|t| t.message.clone());
+    assert!(
+        !last_toast.as_deref().unwrap_or("").contains("Invalid name"),
+        "Unicode name should not trigger validation error"
+    );
+}
+
+#[test]
+fn rename_accepts_spaces_and_hyphens() {
+    let mut app = setup_rename_app();
+    app.rename_profile(0, "My Work VPN - US East");
+    let last_toast = app.toast.as_ref().map(|t| t.message.clone());
+    assert!(
+        !last_toast.as_deref().unwrap_or("").contains("Invalid name"),
+        "Name with spaces and hyphens should not trigger validation error"
     );
 }

@@ -268,10 +268,33 @@ impl App {
                 match output {
                     Ok(out) if !out.status.success() => {
                         let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        let error_detail = if stderr.trim().is_empty() {
+                            // `--daemon --log` redirects all output away from stderr.
+                            // On pre-fork failures (missing certs, bad options) stderr
+                            // is empty — fall back to the log file for the real error.
+                            std::fs::read_to_string(&log_path)
+                                .ok()
+                                .filter(|s| !s.trim().is_empty())
+                                .map_or_else(
+                                    || "unknown error (no stderr or log output)".to_string(),
+                                    |log| {
+                                        log.lines()
+                                            .rev()
+                                            .take(constants::OVPN_ERROR_LOG_TAIL_LINES)
+                                            .collect::<Vec<_>>()
+                                            .into_iter()
+                                            .rev()
+                                            .collect::<Vec<_>>()
+                                            .join("\n")
+                                    },
+                                )
+                        } else {
+                            stderr.trim().to_string()
+                        };
                         let _ = cmd_tx.send(Message::ConnectResult {
                             profile: name,
                             success: false,
-                            error: Some(format!("OpenVPN: {}", stderr.trim())),
+                            error: Some(format!("OpenVPN: {error_detail}")),
                         });
                         return;
                     }

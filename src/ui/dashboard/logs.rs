@@ -4,12 +4,12 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
 
 #[allow(clippy::too_many_lines)]
-pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
+pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     let is_focused = app.should_draw_focus(&crate::app::FocusedPanel::Logs);
     let border_style = if is_focused {
         Style::default().fg(theme::BORDER_FOCUSED)
@@ -56,49 +56,20 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Calculate how many logs we can show (1 log per line, no wrapping)
     let visible_lines = inner.height as usize;
 
-    // Get the last N logs that fit in the panel (auto-scroll behavior)
-    let start_idx = if app.logs_auto_scroll {
-        all_logs.len().saturating_sub(visible_lines)
-    } else {
-        (app.logs_scroll as usize).min(all_logs.len().saturating_sub(1))
-    };
-
-    let end_idx = (start_idx + visible_lines).min(all_logs.len());
-
-    let logs: Vec<Line> = all_logs[start_idx..end_idx]
+    let lines: Vec<Line> = all_logs
         .iter()
         .map(|entry| {
-            // Format: [HH:MM:SS] LEVEL  CATEGORY  message
             let time_str = utils::format_system_time_local(entry.timestamp);
-            let level_tag = entry.level.prefix(); // "INFO ", "WARN ", "ERROR", "DEBUG"
+            let level_tag = entry.level.prefix();
 
-            // Fixed-width category for alignment
             let cat = format!(
                 "{:<width$}",
                 entry.category,
                 width = constants::LOG_CATEGORY_WIDTH
             );
 
-            // Build the message portion
-            let message = &entry.message;
-
-            // Truncate to fit available width after the structured prefix.
-            // Use char boundaries to avoid panicking on multi-byte UTF-8.
-            let max_msg_len = (inner.width as usize).saturating_sub(constants::LOG_PREFIX_WIDTH);
-            let truncated_msg = if message.len() > max_msg_len {
-                let mut end = max_msg_len.saturating_sub(1);
-                while end > 0 && !message.is_char_boundary(end) {
-                    end -= 1;
-                }
-                format!("{}…", &message[..end])
-            } else {
-                message.clone()
-            };
-
-            // Level badge color
             let level_style = match entry.level {
                 logger::LogLevel::Error => Style::default().fg(theme::ERROR),
                 logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
@@ -106,7 +77,6 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
                 logger::LogLevel::Debug => Style::default().fg(Color::DarkGray),
             };
 
-            // Message color (same level-based, with info sub-coloring)
             let msg_style = match entry.level {
                 logger::LogLevel::Error => Style::default().fg(theme::ERROR),
                 logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
@@ -130,14 +100,29 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
                     format!("{cat}  "),
                     Style::default().fg(theme::NORD_POLAR_NIGHT_4),
                 ),
-                Span::styled(truncated_msg, msg_style),
+                Span::styled(entry.message.clone(), msg_style),
             ])
         })
         .collect();
 
-    frame.render_widget(Paragraph::new(logs), inner);
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
 
-    // Scrollbar Logic
+    let total_visual_lines = paragraph.line_count(inner.width);
+    let max_scroll = total_visual_lines.saturating_sub(visible_lines);
+    app.logs_max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
+
+    let scroll_pos = if app.logs_auto_scroll {
+        max_scroll
+    } else {
+        (app.logs_scroll as usize).min(max_scroll)
+    };
+
+    #[allow(clippy::cast_possible_truncation)]
+    let paragraph = paragraph.scroll((scroll_pos as u16, 0));
+
+    frame.render_widget(paragraph, inner);
+
+    // Scrollbar
     let scrollbar = Scrollbar::default()
         .orientation(ScrollbarOrientation::VerticalRight)
         .begin_symbol(Some("↑"))
@@ -145,8 +130,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         .style(Style::default().fg(theme::NORD_POLAR_NIGHT_4))
         .thumb_style(Style::default().fg(theme::ACCENT_PRIMARY));
 
-    let mut scrollbar_state =
-        ScrollbarState::new(all_logs.len().saturating_sub(visible_lines)).position(start_idx);
+    let mut scrollbar_state = ScrollbarState::new(max_scroll).position(scroll_pos);
 
     frame.render_stateful_widget(
         scrollbar,

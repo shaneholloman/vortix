@@ -47,11 +47,22 @@ pub fn render(frame: &mut Frame, app: &App, query: &str, cursor: usize, total: u
     frame.render_widget(block, bar_area);
 
     let before: String = query.chars().take(cursor).collect();
-    let after: String = query.chars().skip(cursor).collect();
+    let cursor_char: String = query
+        .chars()
+        .nth(cursor)
+        .map_or_else(|| "\u{2588}".to_string(), |c| c.to_string());
+    let after: String = query.chars().skip(cursor + 1).collect();
+
     let mut spans = vec![
         Span::styled("/", Style::default().fg(theme::ACCENT_PRIMARY)),
         Span::styled(before, Style::default().fg(theme::TEXT_PRIMARY)),
-        Span::styled("▌", Style::default().fg(theme::ACCENT_PRIMARY)),
+        Span::styled(
+            cursor_char,
+            Style::default()
+                .fg(theme::ACCENT_SECONDARY)
+                .add_modifier(Modifier::REVERSED)
+                .add_modifier(Modifier::SLOW_BLINK),
+        ),
     ];
     if !after.is_empty() {
         spans.push(Span::styled(

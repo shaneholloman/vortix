@@ -93,9 +93,11 @@ pub struct App {
     pub ip_unchanged_warned: bool,
     /// Name of the last successfully connected profile (for reconnect from Disconnected).
     pub last_connected_profile: Option<String>,
-    /// Scroll position for logs panel (logs stored in logger module)
+    /// Scroll position for logs panel (visual line offset with wrapping)
     pub logs_scroll: u16,
     pub logs_auto_scroll: bool,
+    /// Max scroll offset (computed during render based on wrapped line count)
+    pub logs_max_scroll: u16,
     pub log_level_filter: Option<crate::logger::LogLevel>,
 
     // === UI State (Panel-based) ===
@@ -196,6 +198,7 @@ impl App {
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
+            logs_max_scroll: 0,
             log_level_filter: None,
 
             // Panel-based UI state
@@ -379,6 +382,7 @@ impl App {
             last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
+            logs_max_scroll: 0,
             log_level_filter: None,
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,

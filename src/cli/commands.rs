@@ -45,8 +45,32 @@ fn handle_import(file: &str) {
             println!("{}", constants::CLI_MSG_DOWNLOADING);
             match crate::core::downloader::download_profile(&url) {
                 Ok(downloaded_path) => {
-                    // The downloaded path is a temp file
-                    import_single_file(&downloaded_path);
+                    let result = crate::vpn::import_profile(&downloaded_path);
+                    crate::core::downloader::cleanup_temp_download(&downloaded_path);
+                    match result {
+                        Ok(profile) => {
+                            println!("{}{}", constants::CLI_MSG_IMPORT_SUCCESS, profile.name);
+                            println!(
+                                "{}{}",
+                                constants::CLI_MSG_IMPORT_DETAILS_PROTO,
+                                profile.protocol
+                            );
+                            println!(
+                                "{}{}",
+                                constants::CLI_MSG_IMPORT_DETAILS_LOC,
+                                profile.location
+                            );
+                            println!(
+                                "{}{}",
+                                constants::CLI_MSG_IMPORT_DETAILS_PATH,
+                                profile.config_path.display()
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("{}{}", constants::CLI_MSG_IMPORT_FAILED, e);
+                            std::process::exit(1);
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("{}{}", constants::CLI_MSG_IMPORT_FAILED, e);

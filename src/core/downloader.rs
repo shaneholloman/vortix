@@ -159,6 +159,20 @@ pub fn download_profile(url: &str) -> Result<PathBuf, String> {
     Ok(target_path)
 }
 
+/// Remove a temp file left over from a URL download.
+/// Logs on failure but never propagates errors — the import already succeeded.
+pub fn cleanup_temp_download(path: &std::path::Path) {
+    if path.exists() && path.starts_with(std::env::temp_dir()) {
+        if let Err(e) = std::fs::remove_file(path) {
+            logger::log(
+                LogLevel::Warning,
+                "DOWNLOAD",
+                format!("Failed to clean up temp file {}: {e}", path.display()),
+            );
+        }
+    }
+}
+
 /// Extract filename from URL path
 ///
 /// # Limitations
@@ -261,5 +275,32 @@ mod tests {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("conf"))
                 || result.contains("ovpn")
         );
+    }
+
+    #[test]
+    fn cleanup_removes_temp_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("vortix-test-cleanup.ovpn");
+        std::fs::write(&path, "test").unwrap();
+        assert!(path.exists());
+        cleanup_temp_download(&path);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn cleanup_ignores_non_temp_path() {
+        let dir = std::env::current_dir().unwrap();
+        let path = dir.join("vortix-test-cleanup-nontmp.ovpn");
+        std::fs::write(&path, "test").unwrap();
+        assert!(path.exists());
+        cleanup_temp_download(&path);
+        assert!(path.exists(), "file outside temp dir must not be deleted");
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn cleanup_noop_on_missing_file() {
+        let path = std::env::temp_dir().join("vortix-nonexistent-file.ovpn");
+        cleanup_temp_download(&path); // should not panic
     }
 }

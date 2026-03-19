@@ -554,7 +554,15 @@ fn copy_to_clipboard(text: &str) -> bool {
     let result = pipe_to_command("pbcopy", text);
 
     #[cfg(target_os = "linux")]
-    let result = pipe_to_command("xclip", text).or_else(|| pipe_to_command("xsel", text));
+    let result = if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        pipe_to_command("wl-copy", text)
+            .or_else(|| pipe_to_command("xclip", text))
+            .or_else(|| pipe_to_command("xsel", text))
+    } else {
+        pipe_to_command("xclip", text)
+            .or_else(|| pipe_to_command("xsel", text))
+            .or_else(|| pipe_to_command("wl-copy", text))
+    };
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let result: Option<()> = None;

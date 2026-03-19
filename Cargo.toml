@@ -27,7 +27,7 @@ exclude = [
 
 [dependencies]
 # TUI Framework
-ratatui = "0.30"
+ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
 crossterm = "0.29"
 
 # Date/time formatting (local-offset needed for OffsetDateTime::now_local)
@@ -46,6 +46,9 @@ serde_json = "1.0"
 # Configuration
 toml = "1.0"
 dirs = "6"
+
+# Unicode display-width (for footer hint budgeting with multi-byte glyphs)
+unicode-width = "0.2"
 
 # Bug report (browser opening + URL encoding)
 open = "5"

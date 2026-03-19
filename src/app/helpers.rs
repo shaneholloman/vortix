@@ -34,10 +34,8 @@ impl App {
         // Log via centralized logger
         logger::log(level, category, content);
 
-        // Update scroll position based on logger entries
-        let log_count = logger::get_logs().len();
         if self.logs_auto_scroll {
-            self.logs_scroll = u16::try_from(log_count.saturating_sub(1)).unwrap_or(u16::MAX);
+            self.logs_scroll = self.logs_max_scroll;
         }
 
         // Auto-save to log file
@@ -53,7 +51,12 @@ impl App {
 
     /// Show a toast notification and log it
     pub(crate) fn show_toast(&mut self, message: String, toast_type: ToastType) {
-        self.log(&message);
+        let level_prefix = match toast_type {
+            ToastType::Error => "ERR",
+            ToastType::Warning => "WARN",
+            ToastType::Success | ToastType::Info => "APP",
+        };
+        self.log(&format!("{level_prefix}: {message}"));
         self.toast = Some(Toast {
             message,
             toast_type,
@@ -81,14 +84,13 @@ impl App {
                 }
             }
             FocusedPanel::Logs => {
-                let max_scroll =
-                    u16::try_from(logger::get_logs().len().saturating_sub(1)).unwrap_or(u16::MAX);
-                if self.logs_scroll < max_scroll {
+                if self.logs_scroll < self.logs_max_scroll {
                     self.logs_scroll = self.logs_scroll.saturating_add(1);
                 }
-                // Re-enable auto-scroll if near bottom
                 if self.logs_scroll
-                    >= max_scroll.saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
+                    >= self
+                        .logs_max_scroll
+                        .saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
                 {
                     self.logs_auto_scroll = true;
                 }
@@ -195,24 +197,35 @@ impl App {
         #[cfg(target_os = "linux")]
         {
             use std::io::Write;
-            // Try xclip first, then xsel
-            for cmd in &["xclip", "xsel"] {
-                let args: &[&str] = if *cmd == "xclip" {
-                    &["-selection", "clipboard"]
-                } else {
-                    &["--clipboard", "--input"]
-                };
+            // Wayland-first: try wl-copy when $WAYLAND_DISPLAY is set,
+            // then fall back to X11 tools (xclip, xsel).
+            let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
+            let tools: &[(&str, &[&str])] = if is_wayland {
+                &[
+                    ("wl-copy", &[]),
+                    ("xclip", &["-selection", "clipboard"]),
+                    ("xsel", &["--clipboard", "--input"]),
+                ]
+            } else {
+                &[
+                    ("xclip", &["-selection", "clipboard"]),
+                    ("xsel", &["--clipboard", "--input"]),
+                    ("wl-copy", &[]),
+                ]
+            };
+            for (cmd, args) in tools {
                 if let Ok(mut child) = std::process::Command::new(cmd)
-                    .args(args)
+                    .args(*args)
                     .stdin(std::process::Stdio::piped())
                     .spawn()
                 {
                     if let Some(mut stdin) = child.stdin.take() {
                         let _ = stdin.write_all(ip_str.as_bytes());
                     }
-                    let _ = child.wait();
-                    self.show_toast(format!("Copied IP: {ip_str}"), ToastType::Success);
-                    return;
+                    if child.wait().is_ok_and(|s| s.success()) {
+                        self.show_toast(format!("Copied IP: {ip_str}"), ToastType::Success);
+                        return;
+                    }
                 }
             }
         }
