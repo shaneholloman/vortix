@@ -1,13 +1,10 @@
 use crate::app::App;
 use crate::{constants, logger, theme, utils};
-
-/// Fixed-width prefix before the category: "[HH:MM:SS] " (12) + "ERROR " (6) = 18.
-const FIXED_PREFIX_WIDTH: usize = 12 + 6;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
 
@@ -60,67 +57,64 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let visible_lines = inner.height as usize;
-    let panel_width = inner.width as usize;
+    let panel_width = (inner.width as usize).max(1);
 
-    let mut lines: Vec<Line> = Vec::new();
+    let lines: Vec<Line> = all_logs
+        .iter()
+        .map(|entry| {
+            let time_str = utils::format_system_time_local(entry.timestamp);
+            let level_tag = entry.level.prefix();
 
-    for entry in &all_logs {
-        let time_str = utils::format_system_time_local(entry.timestamp);
-        let level_tag = entry.level.prefix();
+            let cat = format!(
+                "{:<width$}",
+                entry.category,
+                width = constants::LOG_CATEGORY_WIDTH
+            );
 
-        let cat = format!(
-            "{:<width$}",
-            entry.category,
-            width = constants::LOG_CATEGORY_WIDTH
-        );
+            let level_style = match entry.level {
+                logger::LogLevel::Error => Style::default().fg(theme::ERROR),
+                logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
+                logger::LogLevel::Info => Style::default().fg(theme::NORD_FROST_3),
+                logger::LogLevel::Debug => Style::default().fg(Color::DarkGray),
+            };
 
-        let prefix_width = FIXED_PREFIX_WIDTH + cat.len() + 2; // +2 for trailing "  "
-        let max_msg_len = panel_width.saturating_sub(prefix_width);
-
-        let level_style = match entry.level {
-            logger::LogLevel::Error => Style::default().fg(theme::ERROR),
-            logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
-            logger::LogLevel::Info => Style::default().fg(theme::NORD_FROST_3),
-            logger::LogLevel::Debug => Style::default().fg(Color::DarkGray),
-        };
-
-        let msg_style = match entry.level {
-            logger::LogLevel::Error => Style::default().fg(theme::ERROR),
-            logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
-            logger::LogLevel::Info => {
-                if entry.message.contains("Connected") || entry.message.contains("secure") {
-                    Style::default().fg(theme::SUCCESS)
-                } else {
-                    Style::default().fg(theme::INACTIVE)
+            let msg_style = match entry.level {
+                logger::LogLevel::Error => Style::default().fg(theme::ERROR),
+                logger::LogLevel::Warning => Style::default().fg(theme::WARNING),
+                logger::LogLevel::Info => {
+                    if entry.message.contains("Connected") || entry.message.contains("secure") {
+                        Style::default().fg(theme::SUCCESS)
+                    } else {
+                        Style::default().fg(theme::INACTIVE)
+                    }
                 }
-            }
-            logger::LogLevel::Debug => Style::default().fg(Color::DarkGray),
-        };
+                logger::LogLevel::Debug => Style::default().fg(Color::DarkGray),
+            };
 
-        let chunks = soft_wrap(&entry.message, max_msg_len);
+            Line::from(vec![
+                Span::styled(
+                    format!("[{time_str}] "),
+                    Style::default().fg(theme::TEXT_SECONDARY),
+                ),
+                Span::styled(format!("{level_tag} "), level_style),
+                Span::styled(
+                    format!("{cat}  "),
+                    Style::default().fg(theme::NORD_POLAR_NIGHT_4),
+                ),
+                Span::styled(entry.message.clone(), msg_style),
+            ])
+        })
+        .collect();
 
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("[{time_str}] "),
-                Style::default().fg(theme::TEXT_SECONDARY),
-            ),
-            Span::styled(format!("{level_tag} "), level_style),
-            Span::styled(
-                format!("{cat}  "),
-                Style::default().fg(theme::NORD_POLAR_NIGHT_4),
-            ),
-            Span::styled(chunks[0].to_string(), msg_style),
-        ]));
+    // Estimate total visual lines after wrapping
+    let total_visual_lines: usize = all_logs
+        .iter()
+        .map(|e| {
+            let content_width = constants::LOG_PREFIX_WIDTH + e.message.len();
+            content_width.div_ceil(panel_width)
+        })
+        .sum();
 
-        for chunk in &chunks[1..] {
-            lines.push(Line::from(vec![
-                Span::raw(" ".repeat(prefix_width)),
-                Span::styled((*chunk).to_string(), msg_style),
-            ]));
-        }
-    }
-
-    let total_visual_lines = lines.len();
     let max_scroll = total_visual_lines.saturating_sub(visible_lines);
     app.logs_max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
 
@@ -130,10 +124,12 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         (app.logs_scroll as usize).min(max_scroll)
     };
 
-    let end = (scroll_pos + visible_lines).min(total_visual_lines);
-    let visible_slice = &lines[scroll_pos..end];
+    #[allow(clippy::cast_possible_truncation)]
+    let paragraph = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .scroll((scroll_pos as u16, 0));
 
-    frame.render_widget(Paragraph::new(visible_slice.to_vec()), inner);
+    frame.render_widget(paragraph, inner);
 
     // Scrollbar
     let scrollbar = Scrollbar::default()
@@ -153,88 +149,4 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         }),
         &mut scrollbar_state,
     );
-}
-
-/// Split `text` into chunks that each fit within `max_width` columns.
-/// Prefers breaking at word boundaries (spaces) for readability.
-fn soft_wrap(text: &str, max_width: usize) -> Vec<&str> {
-    if max_width == 0 {
-        return vec![text];
-    }
-    if text.len() <= max_width {
-        return vec![text];
-    }
-
-    let mut chunks = Vec::new();
-    let mut start = 0;
-
-    while start < text.len() {
-        if text.len() - start <= max_width {
-            chunks.push(&text[start..]);
-            break;
-        }
-
-        let mut end = start + max_width;
-        // Retreat to a char boundary
-        while end > start && !text.is_char_boundary(end) {
-            end -= 1;
-        }
-
-        // Try to break at a space within the last 30% for readability
-        let search_from = start + (max_width * 7 / 10);
-        if let Some(space_pos) = text[search_from..end].rfind(' ') {
-            end = search_from + space_pos + 1; // include the space on this line
-        }
-
-        chunks.push(&text[start..end]);
-        start = end;
-    }
-
-    if chunks.is_empty() {
-        chunks.push(text);
-    }
-    chunks
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn soft_wrap_short_message() {
-        let chunks = soft_wrap("hello world", 80);
-        assert_eq!(chunks, vec!["hello world"]);
-    }
-
-    #[test]
-    fn soft_wrap_breaks_at_space() {
-        let chunks = soft_wrap("the quick brown fox jumps", 15);
-        assert_eq!(chunks[0].len(), 15);
-        assert!(chunks[0].ends_with(' ') || chunks[0].len() <= 15);
-        let rejoined: String = chunks.join("");
-        assert_eq!(rejoined, "the quick brown fox jumps");
-    }
-
-    #[test]
-    fn soft_wrap_long_word() {
-        let long = "a".repeat(100);
-        let chunks = soft_wrap(&long, 30);
-        assert!(chunks.len() >= 4);
-        let rejoined: String = chunks.join("");
-        assert_eq!(rejoined, long);
-    }
-
-    #[test]
-    fn soft_wrap_preserves_content() {
-        let msg = "OpenVPN: Options error: --cert fails with 'client.crt': No such file";
-        let chunks = soft_wrap(msg, 25);
-        let rejoined: String = chunks.join("");
-        assert_eq!(rejoined, msg);
-    }
-
-    #[test]
-    fn soft_wrap_zero_width() {
-        let chunks = soft_wrap("test", 0);
-        assert_eq!(chunks, vec!["test"]);
-    }
 }

@@ -141,6 +141,9 @@ pub const RETRY_ATTEMPTS: u8 = 2;
 /// Fixed-width column for the log category label (e.g. `NET`, `TELEMETRY`).
 /// Must be >= the longest category used anywhere in the codebase.
 pub const LOG_CATEGORY_WIDTH: usize = 9;
+/// Total character width of the structured log prefix:
+/// `[HH:MM:SS] ` (12) + `ERROR ` (6) + category (`LOG_CATEGORY_WIDTH`) + `  ` (2).
+pub const LOG_PREFIX_WIDTH: usize = 12 + 6 + LOG_CATEGORY_WIDTH + 2;
 /// Number of data points in the network throughput chart (1 point per tick).
 pub const NETWORK_HISTORY_SIZE: usize = 60;
 /// Lines from the bottom at which the log panel re-enables auto-scroll.
