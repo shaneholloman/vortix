@@ -57,7 +57,6 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let visible_lines = inner.height as usize;
-    let panel_width = (inner.width as usize).max(1);
 
     let lines: Vec<Line> = all_logs
         .iter()
@@ -106,22 +105,9 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    // Compute total visual lines after word-wrapping.
-    // Word wrapping can waste columns at each break (splitting at word boundaries),
-    // so we add +1 per wrapped line to avoid underestimating.
-    let total_visual_lines: usize = lines
-        .iter()
-        .map(|line| {
-            let w = line.width();
-            let base = w.div_ceil(panel_width).max(1);
-            if w > panel_width {
-                base + 1
-            } else {
-                base
-            }
-        })
-        .sum();
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
 
+    let total_visual_lines = paragraph.line_count(inner.width);
     let max_scroll = total_visual_lines.saturating_sub(visible_lines);
     app.logs_max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
 
@@ -132,9 +118,7 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     };
 
     #[allow(clippy::cast_possible_truncation)]
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll_pos as u16, 0));
+    let paragraph = paragraph.scroll((scroll_pos as u16, 0));
 
     frame.render_widget(paragraph, inner);
 
