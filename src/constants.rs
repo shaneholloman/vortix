@@ -138,11 +138,9 @@ pub const RETRY_ATTEMPTS: u8 = 2;
 
 // === UI Layout & Tuning Constants ===
 
-/// Fixed-width column for the log category label (e.g. `STATUS`, `NET`, `SEC`).
-pub const LOG_CATEGORY_WIDTH: usize = 6;
-/// Total character width of the structured log prefix (`[HH:MM:SS] LEVEL  CAT   `).
-/// Used to calculate how much space is left for the message text.
-pub const LOG_PREFIX_WIDTH: usize = 25;
+/// Fixed-width column for the log category label (e.g. `NET`, `TELEMETRY`).
+/// Must be >= the longest category used anywhere in the codebase.
+pub const LOG_CATEGORY_WIDTH: usize = 9;
 /// Number of data points in the network throughput chart (1 point per tick).
 pub const NETWORK_HISTORY_SIZE: usize = 60;
 /// Lines from the bottom at which the log panel re-enables auto-scroll.
