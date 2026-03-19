@@ -51,7 +51,12 @@ impl App {
 
     /// Show a toast notification and log it
     pub(crate) fn show_toast(&mut self, message: String, toast_type: ToastType) {
-        self.log(&message);
+        let level_prefix = match toast_type {
+            ToastType::Error => "ERR",
+            ToastType::Warning => "WARN",
+            ToastType::Success | ToastType::Info => "APP",
+        };
+        self.log(&format!("{level_prefix}: {message}"));
         self.toast = Some(Toast {
             message,
             toast_type,
