@@ -1783,7 +1783,7 @@ fn assert_rename_rejected(app: &App) {
         app.profiles[0].name, "existing-vpn",
         "name should be unchanged"
     );
-    let toast_msg = app.toast.as_ref().map(|t| t.message.as_str()).unwrap_or("");
+    let toast_msg = app.toast.as_ref().map_or("", |t| t.message.as_str());
     assert!(
         toast_msg.contains("Invalid name"),
         "should produce validation warning toast, got: {toast_msg:?}"
