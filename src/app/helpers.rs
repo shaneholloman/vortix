@@ -34,10 +34,8 @@ impl App {
         // Log via centralized logger
         logger::log(level, category, content);
 
-        // Update scroll position based on logger entries
-        let log_count = logger::get_logs().len();
         if self.logs_auto_scroll {
-            self.logs_scroll = u16::try_from(log_count.saturating_sub(1)).unwrap_or(u16::MAX);
+            self.logs_scroll = self.logs_max_scroll;
         }
 
         // Auto-save to log file
@@ -81,14 +79,13 @@ impl App {
                 }
             }
             FocusedPanel::Logs => {
-                let max_scroll =
-                    u16::try_from(logger::get_logs().len().saturating_sub(1)).unwrap_or(u16::MAX);
-                if self.logs_scroll < max_scroll {
+                if self.logs_scroll < self.logs_max_scroll {
                     self.logs_scroll = self.logs_scroll.saturating_add(1);
                 }
-                // Re-enable auto-scroll if near bottom
                 if self.logs_scroll
-                    >= max_scroll.saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
+                    >= self
+                        .logs_max_scroll
+                        .saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
                 {
                     self.logs_auto_scroll = true;
                 }

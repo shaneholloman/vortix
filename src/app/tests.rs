@@ -47,6 +47,7 @@ fn test_app() -> App {
         last_connected_profile: None,
         logs_scroll: 0,
         logs_auto_scroll: true,
+        logs_max_scroll: 0,
         log_level_filter: None,
         focused_panel: FocusedPanel::Sidebar,
         zoomed_panel: None,

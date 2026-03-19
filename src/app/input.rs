@@ -4,7 +4,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, AuthField, ConnectionState, FocusedPanel, InputMode, ToastType};
 use crate::constants;
-use crate::logger;
 use crate::message::{self, Message, ScrollMove, SelectionMove};
 
 enum ConfirmAction {
@@ -578,14 +577,13 @@ impl App {
                         self.logs_scroll = self.logs_scroll.saturating_sub(1);
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        let max_scroll = u16::try_from(logger::get_logs().len().saturating_sub(1))
-                            .unwrap_or(u16::MAX);
-                        if self.logs_scroll < max_scroll {
+                        if self.logs_scroll < self.logs_max_scroll {
                             self.logs_scroll = self.logs_scroll.saturating_add(1);
                         }
-                        // Re-enable auto-scroll when reaching the end
                         if self.logs_scroll
-                            >= max_scroll.saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
+                            >= self
+                                .logs_max_scroll
+                                .saturating_sub(constants::LOGS_AUTO_SCROLL_THRESHOLD)
                         {
                             self.logs_auto_scroll = true;
                         }
