@@ -9,30 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.8] - 2026-03-19
 
+### Features
+
+- Add centralized theming system — all colors now flow through `theme.rs`, replacing hardcoded `Color::Rgb` across 13 UI files ([#109](https://github.com/Harry-kp/vortix/issues/109), [#147](https://github.com/Harry-kp/vortix/issues/147))
+- Add mouse click-to-select for profiles in the sidebar ([#139](https://github.com/Harry-kp/vortix/issues/139))
+- Add Wayland clipboard support via `wl-copy`, with `xclip`/`xsel` fallback on X11 ([#107](https://github.com/Harry-kp/vortix/issues/107))
+- Add word-wrapped log messages with accurate scroll using `Paragraph::line_count()` — long OpenVPN errors no longer truncate
+
 ### Bug Fixes
 
-- Implement v0.1.8 "Polished & Consistent" milestone
-- Address Copilot review comments on PR #157
-- Use map_or instead of map().unwrap_or() to satisfy clippy
-- Wrap long log messages instead of truncating them
-- Toast messages now logged at correct severity level
-- Indent wrapped log continuation lines to align with message column
-- Compute continuation indent per-entry based on actual category width
-- Widen LOG_CATEGORY_WIDTH to 9 so all messages align in one column
-- Auto-scroll now shows latest log entries correctly
-- Use Paragraph::line_count() for exact wrapped line count
+- Fix OpenVPN error messages not shown in UI — vortix now reads the daemon log file when stderr is empty due to `--daemon --log` ([#154](https://github.com/Harry-kp/vortix/issues/154))
+- Fix footer truncating Help and Quit hints first on narrow terminals — critical hints now have priority, with unicode-aware width calculation ([#134](https://github.com/Harry-kp/vortix/issues/134))
+- Fix cursor style inconsistent across overlays — all text fields now use the same blinking block cursor ([#135](https://github.com/Harry-kp/vortix/issues/135))
+- Fix URL import leaving temp files behind in system temp directory ([#136](https://github.com/Harry-kp/vortix/issues/136))
+- Fix race condition where temp file could be deleted before import completes on TUI URL import
+- Fix clipboard copy reporting success without checking the tool's exit status
+- Fix toast messages logged at wrong severity level (e.g., connection failures logged as INFO instead of ERROR)
+
+### Refactor
+
+- Generalize `centered_rect` helper to support both percentage-based and fixed-size centering, removing duplicate code ([#123](https://github.com/Harry-kp/vortix/issues/123))
+- Eliminate per-frame `String` allocations in footer hint rendering
+
+### Testing
+
+- Add unit tests for rename-profile path traversal validation with rejection assertions ([#137](https://github.com/Harry-kp/vortix/issues/137))
+- Add unit tests for `cleanup_temp_download`, footer hint width calculations, `centered_rect` variants, and theme alias consistency
 
 ### Miscellaneous
 
 - **deps:** Bump the rust-minor group with 2 updates ([#152](https://github.com/Harry-kp/vortix/pull/152))
-
-### Refactor
-
-- Use Paragraph::wrap() for log wrapping, move PREFIX_WIDTH to constants
-
-### Testing
-
-- Add unit tests for cleanup_temp_download, footer hints, centered_rect, and theme aliases
 
 
 
