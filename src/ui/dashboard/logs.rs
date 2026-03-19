@@ -1,5 +1,8 @@
 use crate::app::App;
 use crate::{constants, logger, theme, utils};
+
+/// Fixed-width prefix before the category: "[HH:MM:SS] " (12) + "ERROR " (6) = 18.
+const FIXED_PREFIX_WIDTH: usize = 12 + 6;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
@@ -58,7 +61,6 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
 
     let visible_lines = inner.height as usize;
     let panel_width = inner.width as usize;
-    let max_msg_len = panel_width.saturating_sub(constants::LOG_PREFIX_WIDTH);
 
     let mut lines: Vec<Line> = Vec::new();
 
@@ -71,6 +73,9 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
             entry.category,
             width = constants::LOG_CATEGORY_WIDTH
         );
+
+        let prefix_width = FIXED_PREFIX_WIDTH + cat.len() + 2; // +2 for trailing "  "
+        let max_msg_len = panel_width.saturating_sub(prefix_width);
 
         let level_style = match entry.level {
             logger::LogLevel::Error => Style::default().fg(theme::ERROR),
@@ -94,7 +99,6 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
 
         let chunks = soft_wrap(&entry.message, max_msg_len);
 
-        // First line: full prefix + first chunk of message
         lines.push(Line::from(vec![
             Span::styled(
                 format!("[{time_str}] "),
@@ -108,10 +112,9 @@ pub(super) fn render(frame: &mut Frame, app: &mut App, area: Rect) {
             Span::styled(chunks[0].to_string(), msg_style),
         ]));
 
-        // Continuation lines: indented to align with message column
         for chunk in &chunks[1..] {
             lines.push(Line::from(vec![
-                Span::raw(" ".repeat(constants::LOG_PREFIX_WIDTH)),
+                Span::raw(" ".repeat(prefix_width)),
                 Span::styled((*chunk).to_string(), msg_style),
             ]));
         }
