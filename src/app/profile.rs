@@ -273,7 +273,6 @@ impl App {
                         Ok(path) => {
                             let path_string = path.to_string_lossy().to_string();
                             let _ = tx.send(Message::Import(path_string));
-                            crate::core::downloader::cleanup_temp_download(&path);
                         }
                         Err(e) => {
                             let _ = tx.send(Message::Toast(
@@ -287,6 +286,7 @@ impl App {
             Ok(ImportTarget::File(path)) => {
                 last_imported_name = self.import_single_file(&path);
                 should_close_overlay = last_imported_name.is_some();
+                crate::core::downloader::cleanup_temp_download(&path);
             }
             Ok(ImportTarget::Directory(path)) => {
                 let count = self.import_from_directory(&path);

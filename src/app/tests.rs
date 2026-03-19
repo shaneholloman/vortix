@@ -1778,39 +1778,51 @@ fn setup_rename_app() -> App {
     app
 }
 
+fn assert_rename_rejected(app: &App) {
+    assert_eq!(
+        app.profiles[0].name, "existing-vpn",
+        "name should be unchanged"
+    );
+    let toast_msg = app.toast.as_ref().map(|t| t.message.as_str()).unwrap_or("");
+    assert!(
+        toast_msg.contains("Invalid name"),
+        "should produce validation warning toast, got: {toast_msg:?}"
+    );
+}
+
 #[test]
 fn rename_rejects_empty_name() {
     let mut app = setup_rename_app();
     app.rename_profile(0, "   ");
-    assert_eq!(app.profiles[0].name, "existing-vpn");
+    assert_rename_rejected(&app);
 }
 
 #[test]
 fn rename_rejects_forward_slash() {
     let mut app = setup_rename_app();
     app.rename_profile(0, "../etc/passwd");
-    assert_eq!(app.profiles[0].name, "existing-vpn");
+    assert_rename_rejected(&app);
 }
 
 #[test]
 fn rename_rejects_backslash() {
     let mut app = setup_rename_app();
     app.rename_profile(0, "..\\windows\\system32");
-    assert_eq!(app.profiles[0].name, "existing-vpn");
+    assert_rename_rejected(&app);
 }
 
 #[test]
 fn rename_rejects_dot_dot_traversal() {
     let mut app = setup_rename_app();
     app.rename_profile(0, "foo..bar");
-    assert_eq!(app.profiles[0].name, "existing-vpn");
+    assert_rename_rejected(&app);
 }
 
 #[test]
 fn rename_rejects_hidden_file_prefix() {
     let mut app = setup_rename_app();
     app.rename_profile(0, ".hidden");
-    assert_eq!(app.profiles[0].name, "existing-vpn");
+    assert_rename_rejected(&app);
 }
 
 #[test]

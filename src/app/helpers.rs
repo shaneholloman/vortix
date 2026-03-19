@@ -220,9 +220,10 @@ impl App {
                     if let Some(mut stdin) = child.stdin.take() {
                         let _ = stdin.write_all(ip_str.as_bytes());
                     }
-                    let _ = child.wait();
-                    self.show_toast(format!("Copied IP: {ip_str}"), ToastType::Success);
-                    return;
+                    if child.wait().is_ok_and(|s| s.success()) {
+                        self.show_toast(format!("Copied IP: {ip_str}"), ToastType::Success);
+                        return;
+                    }
                 }
             }
         }

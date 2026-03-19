@@ -8,6 +8,7 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
+use unicode_width::UnicodeWidthStr;
 
 /// Render dashboard footer with context-aware shortcuts.
 ///
@@ -95,11 +96,17 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
     );
 }
 
+/// Terminal display width of a hint item: `key action` plus optional separator.
+fn hint_display_width(key: &str, action: &str, needs_sep: bool) -> usize {
+    let sep = if needs_sep { " │ ".width() } else { 0 };
+    key.width() + 1 + action.width() + sep
+}
+
 /// Render hint spans for one group, appending to `spans`.
-/// Returns the number of characters consumed.
-fn push_hint_spans(
-    spans: &mut Vec<Span<'static>>,
-    hints: &[(&str, &str)],
+/// Returns the number of **display columns** consumed.
+fn push_hint_spans<'a>(
+    spans: &mut Vec<Span<'a>>,
+    hints: &[(&'a str, &'a str)],
     budget: usize,
     current_width: usize,
     needs_leading_sep: bool,
@@ -107,8 +114,7 @@ fn push_hint_spans(
     let mut used = 0;
     for (i, (key, action)) in hints.iter().enumerate() {
         let need_sep = needs_leading_sep || i > 0;
-        let sep_width = if need_sep { 3 } else { 0 };
-        let item_width = key.len() + 1 + action.len() + sep_width;
+        let item_width = hint_display_width(key, action, need_sep);
 
         if current_width + used + item_width > budget {
             break;
@@ -121,14 +127,14 @@ fn push_hint_spans(
             ));
         }
         spans.push(Span::styled(
-            (*key).to_string(),
+            *key,
             Style::default()
                 .fg(crate::theme::KEY_HINT)
                 .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::raw(" "));
         spans.push(Span::styled(
-            (*action).to_string(),
+            *action,
             Style::default().fg(crate::theme::KEY_HINT_DESC),
         ));
 
@@ -155,13 +161,13 @@ fn render_hints(
         .split(area);
 
     let max_width = chunks[0].width as usize;
-    let mut hint_spans: Vec<Span<'static>> = Vec::new();
+    let mut hint_spans: Vec<Span<'_>> = Vec::new();
     let mut current_width: usize = 0;
 
-    // Panel indicator
+    // Panel indicator (allocated once — only string that needs formatting)
     if let Some(panel) = panel_name {
         let indicator = format!("[{panel}] ");
-        current_width += indicator.len();
+        current_width += indicator.width();
         hint_spans.push(Span::styled(
             indicator,
             Style::default()
@@ -177,10 +183,7 @@ fn render_hints(
     let critical_width: usize = critical_hints
         .iter()
         .enumerate()
-        .map(|(i, (k, a))| {
-            let sep = if i > 0 { 3 } else { 0 };
-            k.len() + 1 + a.len() + sep
-        })
+        .map(|(i, (k, a))| hint_display_width(k, a, i > 0))
         .sum();
     // Extra separator between the two groups
     let group_sep = if !context_hints.is_empty() && !critical_hints.is_empty() {

@@ -71,6 +71,7 @@ pub struct Theme {
     pub toast_error: Color,
 
     // --- Palette-specific colors (used for protocol badges, charts, etc.) ---
+    pub yellow: Color,
     pub nord_polar_night_3: Color,
     pub nord_polar_night_4: Color,
     pub nord_frost_3: Color,
@@ -120,6 +121,7 @@ pub const SYNTHWAVE: Theme = Theme {
     toast_warning: Color::Rgb(235, 203, 139),
     toast_error: Color::Rgb(191, 97, 106),
 
+    yellow: Color::Rgb(234, 179, 8),
     nord_polar_night_3: Color::Rgb(67, 76, 94),
     nord_polar_night_4: Color::Rgb(76, 86, 106),
     nord_frost_3: Color::Rgb(129, 161, 193),
@@ -155,7 +157,7 @@ pub const TEAL_ACCENT: Color = SYNTHWAVE.teal_accent;
 pub const EMERALD: Color = SYNTHWAVE.success;
 pub const CORAL_RED: Color = SYNTHWAVE.error;
 pub const AMBER: Color = SYNTHWAVE.warning;
-pub const YELLOW: Color = Color::Rgb(234, 179, 8);
+pub const YELLOW: Color = SYNTHWAVE.yellow;
 
 // Text
 pub const TEXT_WHITE: Color = SYNTHWAVE.text_primary;
@@ -170,7 +172,7 @@ pub const NORD_FROST_2: Color = SYNTHWAVE.accent_primary;
 pub const NORD_FROST_3: Color = SYNTHWAVE.nord_frost_3;
 pub const NORD_GREEN: Color = SYNTHWAVE.success;
 pub const NORD_RED: Color = SYNTHWAVE.error;
-pub const NORD_YELLOW: Color = Color::Rgb(234, 179, 8);
+pub const NORD_YELLOW: Color = SYNTHWAVE.yellow;
 pub const NORD_PURPLE: Color = SYNTHWAVE.nord_purple;
 
 // Semantic aliases
