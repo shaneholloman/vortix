@@ -95,10 +95,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.91.0"
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
-      - name: Run cargo-deny
-        run: cargo deny check
+      - uses: EmbarkStudios/cargo-deny-action@v2
