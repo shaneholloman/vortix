@@ -18,6 +18,11 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(theme::BORDER_DEFAULT)
     };
 
+    if app.effective_flipped(&crate::app::FocusedPanel::ConnectionDetails) {
+        render_back(frame, app, area, border_style);
+        return;
+    }
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
@@ -318,4 +323,79 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         text.truncate(max_lines);
         frame.render_widget(Paragraph::new(text), inner);
     }
+}
+
+fn render_back(frame: &mut Frame, app: &App, area: Rect, border_style: Style) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title(constants::TITLE_FLIP_QUALITY_TIMELINE)
+        .title_bottom(
+            Line::from(Span::styled(
+                constants::FLIP_BACK_HINT,
+                Style::default().fg(theme::KEY_HINT_DESC),
+            ))
+            .right_aligned(),
+        );
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let latency_color = if app.latency_ms < 50 {
+        theme::NORD_GREEN
+    } else if app.latency_ms < 150 {
+        theme::NORD_YELLOW
+    } else {
+        theme::NORD_RED
+    };
+
+    let text = vec![
+        Line::from(Span::styled(
+            "Session Quality History",
+            Style::default()
+                .fg(theme::ACCENT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Latency : ", Style::default().fg(theme::TEXT_SECONDARY)),
+            Span::styled(
+                format!("{}ms", app.latency_ms),
+                Style::default().fg(latency_color),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Jitter  : ", Style::default().fg(theme::TEXT_SECONDARY)),
+            Span::styled(
+                format!("±{}ms", app.jitter_ms),
+                Style::default().fg(theme::TEXT_PRIMARY),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Loss    : ", Style::default().fg(theme::TEXT_SECONDARY)),
+            Span::styled(
+                format!("{:.1}%", app.packet_loss),
+                Style::default().fg(theme::TEXT_PRIMARY),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Sparkline history & session stats",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )),
+        Line::from(Span::styled(
+            "  will be available in a future release.",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  See: github.com/Harry-kp/vortix/issues/167",
+            Style::default().fg(theme::NORD_POLAR_NIGHT_4),
+        )),
+    ];
+
+    let max_lines = inner.height as usize;
+    let mut text = text;
+    text.truncate(max_lines);
+    frame.render_widget(Paragraph::new(text), inner);
 }

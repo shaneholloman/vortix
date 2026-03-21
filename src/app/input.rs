@@ -470,8 +470,16 @@ impl App {
                 }
             }
 
-            // Expert Mode: Zoom
+            // Expert Mode: Zoom / Flip
             KeyCode::Char('z') => self.handle_message(Message::ToggleZoom),
+            KeyCode::Char('f')
+                if matches!(
+                    self.focused_panel,
+                    FocusedPanel::Chart | FocusedPanel::ConnectionDetails | FocusedPanel::Security
+                ) =>
+            {
+                self.handle_message(Message::ToggleFlip);
+            }
             KeyCode::Char('x') => self.handle_message(Message::OpenActionMenu),
             KeyCode::Char('b') => self.handle_message(Message::OpenBulkMenu),
             KeyCode::Esc => {

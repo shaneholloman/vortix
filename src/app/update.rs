@@ -136,6 +136,21 @@ impl App {
                     self.zoomed_panel = Some(self.focused_panel.clone());
                 }
             }
+            Message::ToggleFlip => {
+                let panel = self.focused_panel.clone();
+                if matches!(
+                    panel,
+                    FocusedPanel::Chart | FocusedPanel::ConnectionDetails | FocusedPanel::Security
+                ) && self.flip_animation.is_none()
+                {
+                    let to_back = !self.is_flipped(&panel);
+                    self.flip_animation = Some(crate::state::FlipAnimation {
+                        panel,
+                        started: std::time::Instant::now(),
+                        to_back,
+                    });
+                }
+            }
             Message::CloseOverlay => {
                 self.show_config = false;
                 self.cached_config_content = None;

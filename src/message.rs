@@ -48,6 +48,8 @@ pub enum Message {
     FocusPanel(FocusedPanel),
     /// Toggle zoom on current panel
     ToggleZoom,
+    /// Toggle flip (front/back view) on current panel
+    ToggleFlip,
 
     // === Profile Management ===
     /// Move selection in profile list
@@ -275,6 +277,16 @@ pub fn get_single_actions(focused_panel: &FocusedPanel) -> Vec<ActionMenuItem> {
     }
 
     // 2. Universal Contextual Utility
+    if matches!(
+        focused_panel,
+        FocusedPanel::Chart | FocusedPanel::ConnectionDetails | FocusedPanel::Security
+    ) {
+        actions.push(ActionMenuItem {
+            key: "f",
+            label: "Flip Panel (Front/Back)",
+            message: Message::ToggleFlip,
+        });
+    }
     actions.push(ActionMenuItem {
         key: "z",
         label: "Toggle Zoom View",
@@ -368,22 +380,25 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_details_actions_include_copy_ip() {
+    fn test_connection_details_actions_include_copy_ip_and_flip() {
         let actions = get_single_actions(&FocusedPanel::ConnectionDetails);
-        assert!(actions.iter().any(|a| a.key == "y"));
+        assert!(actions.iter().any(|a| a.key == "y")); // copy IP
+        assert!(actions.iter().any(|a| a.key == "f")); // flip
     }
 
     #[test]
-    fn test_chart_actions_only_zoom() {
+    fn test_chart_actions_flip_and_zoom() {
         let actions = get_single_actions(&FocusedPanel::Chart);
-        assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0].key, "z");
+        assert_eq!(actions.len(), 2);
+        assert!(actions.iter().any(|a| a.key == "f")); // flip
+        assert!(actions.iter().any(|a| a.key == "z")); // zoom
     }
 
     #[test]
-    fn test_security_actions_include_killswitch() {
+    fn test_security_actions_include_killswitch_and_flip() {
         let actions = get_single_actions(&FocusedPanel::Security);
         assert!(actions.iter().any(|a| a.key == "K")); // kill switch
+        assert!(actions.iter().any(|a| a.key == "f")); // flip
         assert!(actions.iter().any(|a| a.key == "z")); // zoom
     }
 

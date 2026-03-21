@@ -3,7 +3,7 @@ use cli::args::Args;
 use color_eyre::Result;
 use event::{Event, EventHandler};
 use vortix::app::App;
-use vortix::{cli, config, event, ui};
+use vortix::{cli, config, constants, event, ui};
 
 fn main() -> Result<()> {
     // Initialize error handling first — color_eyre::install() sets its own
@@ -181,17 +181,33 @@ fn run_tui(
     terminal.draw(|frame| ui::render(frame, &mut app))?;
 
     while !app.should_quit {
-        // Process event
-        match events.next()? {
-            Event::Key(key_event) => app.handle_key(key_event),
-            Event::Mouse(mouse_event) => app.handle_mouse(mouse_event),
-            Event::Tick => app.on_tick(),
-            Event::Resize(width, height) => app.on_resize(width, height),
+        if app.has_active_animation() {
+            while let Some(event) = events.try_next()? {
+                match event {
+                    Event::Key(key_event) => app.handle_key(key_event),
+                    Event::Mouse(mouse_event) => app.handle_mouse(mouse_event),
+                    Event::Tick => app.on_tick(),
+                    Event::Resize(w, h) => app.on_resize(w, h),
+                }
+            }
+            app.advance_animation();
+        } else {
+            match events.next()? {
+                Event::Key(key_event) => app.handle_key(key_event),
+                Event::Mouse(mouse_event) => app.handle_mouse(mouse_event),
+                Event::Tick => app.on_tick(),
+                Event::Resize(width, height) => app.on_resize(width, height),
+            }
         }
 
-        // Process any pending telemetry before drawing (for immediate log updates)
         app.process_external();
         terminal.draw(|frame| ui::render(frame, &mut app))?;
+
+        if app.has_active_animation() {
+            std::thread::sleep(std::time::Duration::from_millis(
+                constants::FLIP_ANIMATION_FRAME_MS,
+            ));
+        }
     }
 
     Ok(())

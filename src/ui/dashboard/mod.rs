@@ -6,13 +6,13 @@ mod security;
 mod sidebar;
 
 use super::helpers::centered_rect;
-use crate::app::{App, InputMode};
+use crate::app::{App, FocusedPanel, InputMode};
 use crate::{constants, message, theme, utils};
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Clear, Paragraph},
     Frame,
 };
 
@@ -60,20 +60,44 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .split(main_layout[0]);
 
     sidebar::render(frame, app, sidebar_layout[0]);
-    connection_details::render(frame, app, sidebar_layout[1]);
+    render_animated_panel(
+        frame,
+        app,
+        &FocusedPanel::ConnectionDetails,
+        sidebar_layout[1],
+        |f, a, r| {
+            connection_details::render(f, a, r);
+        },
+    );
 
     // Right Workspace: Top (Chart) | Bottom (Security + Logs)
     let workspace_chunks =
         Layout::vertical([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(main_layout[1]);
 
-    chart::render(frame, app, workspace_chunks[0]);
+    render_animated_panel(
+        frame,
+        app,
+        &FocusedPanel::Chart,
+        workspace_chunks[0],
+        |f, a, r| {
+            chart::render(f, a, r);
+        },
+    );
 
     // Bottom Dash: Left (Security Guard) | Right (Event Log)
     let dash_chunks = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(workspace_chunks[1]);
 
-    security::render(frame, app, dash_chunks[0]);
+    render_animated_panel(
+        frame,
+        app,
+        &FocusedPanel::Security,
+        dash_chunks[0],
+        |f, a, r| {
+            security::render(f, a, r);
+        },
+    );
     logs::render(frame, app, dash_chunks[1]);
 
     // Register Click Areas
@@ -94,20 +118,68 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
     // Render Zoomed Panel Overlay (if active)
     if let Some(panel) = &app.zoomed_panel {
-        let area = centered_rect(90, 90, frame.area());
-        frame.render_widget(ratatui::widgets::Clear, area);
+        let zoom_area = centered_rect(90, 90, frame.area());
+        frame.render_widget(Clear, zoom_area);
 
-        // Render the zoomed panel
         match panel {
-            crate::app::FocusedPanel::Sidebar => sidebar::render(frame, app, area),
-            crate::app::FocusedPanel::ConnectionDetails => {
-                connection_details::render(frame, app, area);
+            FocusedPanel::Sidebar => sidebar::render(frame, app, zoom_area),
+            FocusedPanel::ConnectionDetails => {
+                render_animated_panel(frame, app, panel, zoom_area, |f, a, r| {
+                    connection_details::render(f, a, r);
+                });
             }
-            crate::app::FocusedPanel::Chart => chart::render(frame, app, area),
-            crate::app::FocusedPanel::Security => security::render(frame, app, area),
-            crate::app::FocusedPanel::Logs => logs::render(frame, app, area),
+            FocusedPanel::Chart => {
+                render_animated_panel(frame, app, panel, zoom_area, |f, a, r| {
+                    chart::render(f, a, r);
+                });
+            }
+            FocusedPanel::Security => {
+                render_animated_panel(frame, app, panel, zoom_area, |f, a, r| {
+                    security::render(f, a, r);
+                });
+            }
+            FocusedPanel::Logs => logs::render(frame, app, zoom_area),
         }
     }
+}
+
+/// Compute a horizontally-narrowed rect for the card-flip animation.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn animated_rect(area: Rect, width_ratio: f64) -> Rect {
+    if area.width == 0 || area.height == 0 {
+        return area;
+    }
+    let mut new_width = (f64::from(area.width) * width_ratio).max(1.0) as u16;
+    if new_width > area.width {
+        new_width = area.width;
+    }
+    let x_offset = (area.width.saturating_sub(new_width)) / 2;
+    Rect::new(area.x + x_offset, area.y, new_width, area.height)
+}
+
+/// Render a panel with optional flip animation (horizontal card-flip effect).
+fn render_animated_panel(
+    frame: &mut Frame,
+    app: &App,
+    panel: &FocusedPanel,
+    area: Rect,
+    render_fn: impl FnOnce(&mut Frame, &App, Rect),
+) {
+    if let Some(anim) = &app.flip_animation {
+        if anim.panel == *panel {
+            frame.render_widget(Clear, area);
+            let ratio = anim.width_ratio();
+            let narrow = animated_rect(area, ratio);
+            if narrow.width >= constants::FLIP_ANIMATION_MIN_WIDTH {
+                render_fn(frame, app, narrow);
+            } else {
+                let edge = Paragraph::new(Line::from(Span::raw("│"))).alignment(Alignment::Center);
+                frame.render_widget(edge, narrow);
+            }
+            return;
+        }
+    }
+    render_fn(frame, app, area);
 }
 
 #[allow(clippy::too_many_lines)]
