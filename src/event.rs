@@ -95,10 +95,17 @@ impl EventHandler {
         Ok(self.receiver.recv()?)
     }
 
-    /// Non-blocking poll for the next event. Returns `None` if no event is
-    /// pending. Used during animations to keep the render loop fast.
-    #[must_use]
-    pub fn try_next(&self) -> Option<Event> {
-        self.receiver.try_recv().ok()
+    /// Non-blocking poll for the next event. Returns `Ok(None)` when the
+    /// channel is empty, or `Err` if the sender thread has disconnected.
+    /// Used during animations to keep the render loop fast without missing
+    /// a disconnected channel.
+    pub fn try_next(&self) -> Result<Option<Event>> {
+        match self.receiver.try_recv() {
+            Ok(event) => Ok(Some(event)),
+            Err(mpsc::TryRecvError::Empty) => Ok(None),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Err(color_eyre::eyre::eyre!("Event channel disconnected"))
+            }
+        }
     }
 }

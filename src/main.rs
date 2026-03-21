@@ -182,7 +182,7 @@ fn run_tui(
 
     while !app.should_quit {
         if app.has_active_animation() {
-            while let Some(event) = events.try_next() {
+            while let Some(event) = events.try_next()? {
                 match event {
                     Event::Key(key_event) => app.handle_key(key_event),
                     Event::Mouse(mouse_event) => app.handle_mouse(mouse_event),
