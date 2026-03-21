@@ -45,6 +45,10 @@ pub const DEFAULT_AUTO_RECONNECT: bool = true;
 pub const DEFAULT_AUTO_RECONNECT_DELAY_SECS: u64 = 3;
 /// Network monitor gateway check interval in seconds.
 pub const NETWORK_MONITOR_POLL_SECS: u64 = 3;
+/// Duration of the panel flip animation in milliseconds.
+pub const FLIP_ANIMATION_DURATION_MS: u64 = 200;
+/// Target frame interval during flip animation (~40 FPS).
+pub const FLIP_ANIMATION_FRAME_MS: u64 = 25;
 
 // === Telemetry API Endpoint Defaults ===
 // Same principle: single source of truth, overridable via config.toml.
@@ -244,6 +248,19 @@ pub const DEFAULT_IMPORTED_FILENAME: &str = "imported_profile.conf";
 pub const TITLE_IMPORT_PROFILE: &str = " Import VPN Profile ";
 pub const TITLE_IMPORT_FOOTER: &str = " [Enter] Import  [Esc] Cancel ";
 pub const PROMPT_IMPORT_PATH: &str = "Enter path to file, directory, or URL:";
+
+// === Flip Panel (Back-View) Titles ===
+
+/// Back-view title for the Network Throughput chart panel.
+pub const TITLE_FLIP_NETWORK_ACTIVITY: &str = " ◀ Network Activity ";
+/// Back-view title for the Connection Details panel.
+pub const TITLE_FLIP_QUALITY_TIMELINE: &str = " ◀ Quality Timeline ";
+/// Back-view title for the Security Guard panel.
+pub const TITLE_FLIP_CONNECTIONS_AUDIT: &str = " ◀ Connections Audit ";
+/// Footer hint shown on every flipped panel.
+pub const FLIP_BACK_HINT: &str = " [f] flip back ";
+/// Minimum panel width (columns) to render content during flip animation.
+pub const FLIP_ANIMATION_MIN_WIDTH: u16 = 3;
 pub const HINT_IMPORT_BULK: &str = "💡 Tip: Enter a directory to bulk import all profiles";
 pub const LABEL_SUPPORTED_FORMATS: &str = "Supported formats:";
 pub const EXT_CONF: &str = ".conf";

@@ -60,6 +60,7 @@ pub fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
         crate::app::FocusedPanel::Chart
         | crate::app::FocusedPanel::Security
         | crate::app::FocusedPanel::ConnectionDetails => {
+            context_hints.push(("f", "Flip"));
             context_hints.push(("z", "Zoom"));
         }
     }

@@ -2,7 +2,7 @@ use crate::app::{App, ConnectionState};
 use crate::{constants, theme, utils};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{
         canvas::{Canvas, Line as CanvasLine},
@@ -19,6 +19,11 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         Style::default().fg(theme::BORDER_DEFAULT)
     };
+
+    if app.effective_flipped(&crate::app::FocusedPanel::Chart) {
+        render_back(frame, app, area, border_style);
+        return;
+    }
 
     // Peak detection for dynamic Y-axis scaling (calculate first for title)
     let max_down = app.down_history.iter().copied().fold(0.0, f64::max);
@@ -47,7 +52,7 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         .title_bottom(
             Line::from(Span::styled(
                 format!(" Scale: 0 – {scale_val:.1} {scale_unit} "),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme::KEY_HINT_DESC),
             ))
             .right_aligned(),
         );
@@ -141,4 +146,57 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
             }
         });
     frame.render_widget(canvas, chunks[1]);
+}
+
+fn render_back(frame: &mut Frame, app: &App, area: Rect, border_style: Style) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title(constants::TITLE_FLIP_NETWORK_ACTIVITY)
+        .title_bottom(
+            Line::from(Span::styled(
+                constants::FLIP_BACK_HINT,
+                Style::default().fg(theme::KEY_HINT_DESC),
+            ))
+            .right_aligned(),
+        );
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let current_down_str = utils::format_bytes_speed(app.current_down);
+    let current_up_str = utils::format_bytes_speed(app.current_up);
+
+    let text = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Per-Process Network Usage",
+            Style::default()
+                .fg(theme::ACCENT_PRIMARY)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Total ▼ ", Style::default().fg(theme::NORD_FROST_2)),
+            Span::styled(&current_down_str, Style::default().fg(theme::TEXT_PRIMARY)),
+            Span::styled("  ▲ ", Style::default().fg(theme::NORD_GREEN)),
+            Span::styled(&current_up_str, Style::default().fg(theme::TEXT_PRIMARY)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Process table with sorting & filtering",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )),
+        Line::from(Span::styled(
+            "  will be available in a future release.",
+            Style::default().fg(theme::TEXT_SECONDARY),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  See: github.com/Harry-kp/vortix/issues/166",
+            Style::default().fg(theme::NORD_POLAR_NIGHT_4),
+        )),
+    ];
+
+    frame.render_widget(Paragraph::new(text).alignment(Alignment::Left), inner);
 }

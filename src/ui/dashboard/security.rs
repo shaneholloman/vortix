@@ -17,6 +17,11 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(theme::BORDER_DEFAULT)
     };
 
+    if app.effective_flipped(&crate::app::FocusedPanel::Security) {
+        render_back(frame, app, area, border_style);
+        return;
+    }
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
@@ -295,4 +300,84 @@ pub(super) fn render(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     frame.render_widget(Paragraph::new(audit), inner);
+}
+
+fn render_back(frame: &mut Frame, app: &App, area: Rect, border_style: Style) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title(constants::TITLE_FLIP_CONNECTIONS_AUDIT)
+        .title_bottom(
+            Line::from(Span::styled(
+                constants::FLIP_BACK_HINT,
+                Style::default().fg(theme::KEY_HINT_DESC),
+            ))
+            .right_aligned(),
+        );
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let is_connected = !matches!(app.connection_state, ConnectionState::Disconnected);
+
+    let text = if is_connected {
+        vec![
+            Line::from(Span::styled(
+                "Active Connections Audit",
+                Style::default()
+                    .fg(theme::ACCENT_PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Per-socket VPN routing verification",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(Span::styled(
+                "  will be available in a future release.",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  This view will show which connections",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(Span::styled(
+                "  are routed through the VPN tunnel vs",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(Span::styled(
+                "  bypassing it (split-tunnel detection).",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  See: github.com/Harry-kp/vortix/issues/168",
+                Style::default().fg(theme::NORD_POLAR_NIGHT_4),
+            )),
+        ]
+    } else {
+        vec![
+            Line::from(Span::styled(
+                "Active Connections Audit",
+                Style::default()
+                    .fg(theme::INACTIVE)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Connect to a VPN to see",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+            Line::from(Span::styled(
+                "  connection routing details.",
+                Style::default().fg(theme::TEXT_SECONDARY),
+            )),
+        ]
+    };
+
+    let max_lines = inner.height as usize;
+    let mut text = text;
+    text.truncate(max_lines);
+    frame.render_widget(Paragraph::new(text), inner);
 }

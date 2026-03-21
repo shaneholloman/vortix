@@ -51,6 +51,8 @@ fn test_app() -> App {
         log_level_filter: None,
         focused_panel: FocusedPanel::Sidebar,
         zoomed_panel: None,
+        panel_flipped: std::collections::HashSet::new(),
+        flip_animation: None,
         input_mode: InputMode::Normal,
         show_config: false,
         show_action_menu: false,
@@ -1861,4 +1863,207 @@ fn rename_accepts_spaces_and_hyphens() {
         !last_toast.as_deref().unwrap_or("").contains("Invalid name"),
         "Name with spaces and hyphens should not trigger validation error"
     );
+}
+
+// === Flip Panel Tests ===
+
+/// Simulate completing a flip animation (advances time past the duration).
+fn complete_flip(app: &mut App) {
+    // Force-complete: take the animation and apply the state change
+    if let Some(anim) = app.flip_animation.take() {
+        if anim.to_back {
+            app.panel_flipped.insert(anim.panel);
+        } else {
+            app.panel_flipped.remove(&anim.panel);
+        }
+    }
+}
+
+#[test]
+fn flip_starts_animation() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_some());
+    assert!(!app.is_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn flip_toggles_chart_panel_after_animation() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    assert!(!app.is_flipped(&FocusedPanel::Chart));
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(app.is_flipped(&FocusedPanel::Chart));
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(!app.is_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn flip_toggles_security_panel() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Security;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(app.is_flipped(&FocusedPanel::Security));
+    assert!(!app.is_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn flip_toggles_connection_details_panel() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::ConnectionDetails;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(app.is_flipped(&FocusedPanel::ConnectionDetails));
+}
+
+#[test]
+fn flip_ignores_sidebar() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Sidebar;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_none());
+    assert!(app.panel_flipped.is_empty());
+}
+
+#[test]
+fn flip_ignores_logs() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Logs;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_none());
+    assert!(app.panel_flipped.is_empty());
+}
+
+#[test]
+fn flip_blocked_during_active_animation() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_some());
+    let started = app.flip_animation.as_ref().unwrap().started;
+    app.handle_message(Message::ToggleFlip);
+    assert_eq!(app.flip_animation.as_ref().unwrap().started, started);
+}
+
+#[test]
+fn flip_state_persists_across_focus_changes() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(app.is_flipped(&FocusedPanel::Chart));
+    app.focused_panel = FocusedPanel::Security;
+    assert!(app.is_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn flip_multiple_panels_independently() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    app.focused_panel = FocusedPanel::Security;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert!(app.is_flipped(&FocusedPanel::Chart));
+    assert!(app.is_flipped(&FocusedPanel::Security));
+    assert!(!app.is_flipped(&FocusedPanel::ConnectionDetails));
+}
+
+#[test]
+fn flip_effective_state_at_midpoint() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    assert!(!app.effective_flipped(&FocusedPanel::Chart));
+    app.handle_message(Message::ToggleFlip);
+    assert!(!app.effective_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn flip_state_cleared_on_disconnect() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["test-profile"]);
+    set_connected(&mut app, "test-profile");
+
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    app.focused_panel = FocusedPanel::Security;
+    app.handle_message(Message::ToggleFlip);
+    complete_flip(&mut app);
+    assert_eq!(app.panel_flipped.len(), 2);
+
+    app.complete_disconnect("test-profile");
+    assert!(app.panel_flipped.is_empty());
+}
+
+#[test]
+fn advance_animation_completes_to_back() {
+    let mut app = test_app();
+    app.flip_animation = Some(crate::state::FlipAnimation {
+        panel: FocusedPanel::Chart,
+        started: std::time::Instant::now()
+            - std::time::Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 10),
+        to_back: true,
+    });
+    assert!(!app.is_flipped(&FocusedPanel::Chart));
+    app.advance_animation();
+    assert!(app.flip_animation.is_none());
+    assert!(app.is_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn advance_animation_completes_to_front() {
+    let mut app = test_app();
+    app.panel_flipped.insert(FocusedPanel::Security);
+    app.flip_animation = Some(crate::state::FlipAnimation {
+        panel: FocusedPanel::Security,
+        started: std::time::Instant::now()
+            - std::time::Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 10),
+        to_back: false,
+    });
+    assert!(app.is_flipped(&FocusedPanel::Security));
+    app.advance_animation();
+    assert!(app.flip_animation.is_none());
+    assert!(!app.is_flipped(&FocusedPanel::Security));
+}
+
+#[test]
+fn advance_animation_noop_when_still_running() {
+    let mut app = test_app();
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_some());
+    app.advance_animation();
+    assert!(app.flip_animation.is_some());
+}
+
+#[test]
+fn effective_flipped_shows_target_after_midpoint() {
+    let mut app = test_app();
+    app.flip_animation = Some(crate::state::FlipAnimation {
+        panel: FocusedPanel::Chart,
+        started: std::time::Instant::now()
+            - std::time::Duration::from_millis(
+                crate::constants::FLIP_ANIMATION_DURATION_MS * 3 / 4,
+            ),
+        to_back: true,
+    });
+    assert!(app.effective_flipped(&FocusedPanel::Chart));
+}
+
+#[test]
+fn disconnect_clears_animation() {
+    let mut app = test_app();
+    add_profiles(&mut app, &["p1"]);
+    set_connected(&mut app, "p1");
+    app.focused_panel = FocusedPanel::Chart;
+    app.handle_message(Message::ToggleFlip);
+    assert!(app.flip_animation.is_some());
+    app.complete_disconnect("p1");
+    assert!(app.flip_animation.is_none());
 }

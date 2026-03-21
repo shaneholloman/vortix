@@ -94,4 +94,11 @@ impl EventHandler {
     pub fn next(&self) -> Result<Event> {
         Ok(self.receiver.recv()?)
     }
+
+    /// Non-blocking poll for the next event. Returns `None` if no event is
+    /// pending. Used during animations to keep the render loop fast.
+    #[must_use]
+    pub fn try_next(&self) -> Option<Event> {
+        self.receiver.try_recv().ok()
+    }
 }

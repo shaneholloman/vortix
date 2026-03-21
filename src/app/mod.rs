@@ -23,7 +23,7 @@ mod tests;
 
 use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -36,8 +36,8 @@ use crate::utils;
 
 // Re-export state types for convenient access
 pub use crate::state::{
-    AuthField, ConnectionState, DetailedConnectionInfo, FocusedPanel, InputMode, ProfileSortOrder,
-    Protocol, Toast, ToastType, VpnProfile, DISMISS_DURATION,
+    AuthField, ConnectionState, DetailedConnectionInfo, FlipAnimation, FocusedPanel, InputMode,
+    ProfileSortOrder, Protocol, Toast, ToastType, VpnProfile, DISMISS_DURATION,
 };
 
 /// Main application state container.
@@ -103,6 +103,10 @@ pub struct App {
     // === UI State (Panel-based) ===
     pub focused_panel: FocusedPanel,
     pub zoomed_panel: Option<FocusedPanel>,
+    /// Panels currently showing their back (detailed) view.
+    pub panel_flipped: HashSet<FocusedPanel>,
+    /// Active flip animation (if any).
+    pub flip_animation: Option<FlipAnimation>,
     pub input_mode: InputMode,
     pub show_config: bool,
     pub show_action_menu: bool,
@@ -204,6 +208,8 @@ impl App {
             // Panel-based UI state
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,
+            panel_flipped: HashSet::new(),
+            flip_animation: None,
             input_mode: InputMode::Normal,
             show_config: false,
             show_action_menu: false,
@@ -347,6 +353,47 @@ impl App {
         // Otherwise, standard focus
         self.focused_panel == *panel
     }
+
+    /// Check if a panel is currently showing its back (detailed) view.
+    #[must_use]
+    pub fn is_flipped(&self, panel: &FocusedPanel) -> bool {
+        self.panel_flipped.contains(panel)
+    }
+
+    /// Whether a flip animation is in progress.
+    #[must_use]
+    pub fn has_active_animation(&self) -> bool {
+        self.flip_animation.is_some()
+    }
+
+    /// Advance the flip animation; finalize the state change when complete.
+    pub fn advance_animation(&mut self) {
+        let complete = self
+            .flip_animation
+            .as_ref()
+            .is_some_and(FlipAnimation::is_complete);
+        if complete {
+            if let Some(anim) = self.flip_animation.take() {
+                if anim.to_back {
+                    self.panel_flipped.insert(anim.panel);
+                } else {
+                    self.panel_flipped.remove(&anim.panel);
+                }
+            }
+        }
+    }
+
+    /// Effective flip state for rendering, accounting for mid-animation view switch.
+    #[must_use]
+    pub fn effective_flipped(&self, panel: &FocusedPanel) -> bool {
+        let base = self.is_flipped(panel);
+        if let Some(anim) = &self.flip_animation {
+            if anim.panel == *panel && anim.past_midpoint() {
+                return !base;
+            }
+        }
+        base
+    }
 }
 
 impl App {
@@ -386,6 +433,8 @@ impl App {
             log_level_filter: None,
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,
+            panel_flipped: HashSet::new(),
+            flip_animation: None,
             input_mode: InputMode::Normal,
             show_config: false,
             show_action_menu: false,
