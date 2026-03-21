@@ -2007,7 +2007,10 @@ fn advance_animation_completes_to_back() {
     app.flip_animation = Some(crate::state::FlipAnimation {
         panel: FocusedPanel::Chart,
         started: std::time::Instant::now()
-            - std::time::Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 10),
+            .checked_sub(std::time::Duration::from_millis(
+                crate::constants::FLIP_ANIMATION_DURATION_MS + 10,
+            ))
+            .unwrap(),
         to_back: true,
     });
     assert!(!app.is_flipped(&FocusedPanel::Chart));
@@ -2023,7 +2026,10 @@ fn advance_animation_completes_to_front() {
     app.flip_animation = Some(crate::state::FlipAnimation {
         panel: FocusedPanel::Security,
         started: std::time::Instant::now()
-            - std::time::Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 10),
+            .checked_sub(std::time::Duration::from_millis(
+                crate::constants::FLIP_ANIMATION_DURATION_MS + 10,
+            ))
+            .unwrap(),
         to_back: false,
     });
     assert!(app.is_flipped(&FocusedPanel::Security));
@@ -2048,9 +2054,10 @@ fn effective_flipped_shows_target_after_midpoint() {
     app.flip_animation = Some(crate::state::FlipAnimation {
         panel: FocusedPanel::Chart,
         started: std::time::Instant::now()
-            - std::time::Duration::from_millis(
+            .checked_sub(std::time::Duration::from_millis(
                 crate::constants::FLIP_ANIMATION_DURATION_MS * 3 / 4,
-            ),
+            ))
+            .unwrap(),
         to_back: true,
     });
     assert!(app.effective_flipped(&FocusedPanel::Chart));

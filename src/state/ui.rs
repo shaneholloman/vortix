@@ -336,7 +336,10 @@ mod tests {
         let anim = FlipAnimation {
             panel: FocusedPanel::Security,
             started: Instant::now()
-                - Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 10),
+                .checked_sub(Duration::from_millis(
+                    crate::constants::FLIP_ANIMATION_DURATION_MS + 10,
+                ))
+                .unwrap(),
             to_back: false,
         };
         assert!(anim.is_complete());
@@ -348,7 +351,10 @@ mod tests {
         let anim = FlipAnimation {
             panel: FocusedPanel::Chart,
             started: Instant::now()
-                - Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS),
+                .checked_sub(Duration::from_millis(
+                    crate::constants::FLIP_ANIMATION_DURATION_MS,
+                ))
+                .unwrap(),
             to_back: true,
         };
         assert!(anim.past_midpoint());
@@ -359,7 +365,10 @@ mod tests {
         let anim = FlipAnimation {
             panel: FocusedPanel::ConnectionDetails,
             started: Instant::now()
-                - Duration::from_millis(crate::constants::FLIP_ANIMATION_DURATION_MS + 50),
+                .checked_sub(Duration::from_millis(
+                    crate::constants::FLIP_ANIMATION_DURATION_MS + 50,
+                ))
+                .unwrap(),
             to_back: true,
         };
         assert!((anim.width_ratio() - 1.0).abs() < f64::EPSILON);
