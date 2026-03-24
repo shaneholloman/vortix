@@ -306,7 +306,12 @@ fn cli_import_single_file() {
     std::fs::write(
         &conf,
         "[Interface]\nPrivateKey = abc=\nAddress = 10.0.0.1/24\n\n[Peer]\nPublicKey = xyz=\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 0.0.0.0/0\n",
-    ).unwrap();
+    )
+    .unwrap();
+
+    // Point the global config dir to a temp directory so import_profile()
+    // doesn't write to the real ~/.config/vortix/profiles/.
+    std::env::set_var("VORTIX_CONFIG_DIR", config_dir.path());
 
     let config = vortix::config::AppConfig::default();
     let exit = handle_command(
@@ -318,7 +323,13 @@ fn cli_import_single_file() {
         &config,
         OutputMode::Quiet,
     );
+
+    std::env::remove_var("VORTIX_CONFIG_DIR");
     assert_eq!(exit, 0, "Importing a valid profile should succeed");
+
+    // Verify the profile landed in the temp dir, not the real config
+    let profiles_dir = config_dir.path().join("profiles");
+    assert!(profiles_dir.join("test.conf").exists());
 }
 
 // ============================================================================
