@@ -1,6 +1,6 @@
 //! CLI integration tests.
 //!
-//! These tests verify the CLI output layer, VpnEngine headless mode, and
+//! These tests verify the CLI output layer, `VpnEngine` headless mode, and
 //! command handlers without requiring root, VPN tools, or network access.
 
 use vortix::cli::output::{error_response, CliError, CliResponse, ExitCode, OutputMode};
