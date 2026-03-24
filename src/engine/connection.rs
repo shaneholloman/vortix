@@ -236,12 +236,30 @@ impl VpnEngine {
                 Protocol::OpenVPN => {
                     let target_pid = utils::read_openvpn_pid(&pn).or(pid);
                     let signal = if force { "-9" } else { "-15" };
-                    if let Some(p) = target_pid {
-                        std::process::Command::new("kill")
+                    let kill_result = if let Some(p) = target_pid {
+                        let result = std::process::Command::new("kill")
                             .args([signal, &p.to_string()])
                             .stdout(std::process::Stdio::piped())
                             .stderr(std::process::Stdio::piped())
-                            .output()
+                            .output();
+
+                        // `kill` returns success when the signal is delivered, but
+                        // the daemon may still be alive. Poll until it's gone.
+                        if result.as_ref().is_ok_and(|o| o.status.success()) {
+                            let deadline = Instant::now()
+                                + Duration::from_secs(constants::OVPN_KILL_WAIT_SECS);
+                            while Instant::now() < deadline {
+                                std::thread::sleep(Duration::from_millis(200));
+                                let alive = std::process::Command::new("kill")
+                                    .args(["-0", &p.to_string()])
+                                    .output()
+                                    .is_ok_and(|o| o.status.success());
+                                if !alive {
+                                    break;
+                                }
+                            }
+                        }
+                        result
                     } else {
                         let safe = utils::sanitize_profile_name(&pn);
                         std::process::Command::new("pkill")
@@ -249,7 +267,8 @@ impl VpnEngine {
                             .stdout(std::process::Stdio::piped())
                             .stderr(std::process::Stdio::piped())
                             .output()
-                    }
+                    };
+                    kill_result
                 }
             };
 
