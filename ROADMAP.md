@@ -68,6 +68,26 @@ Today, Vortix is a macOS-first tool that happens to compile on Linux. v0.2.0 mak
 
 ---
 
+## v0.2.1 — "CLI First" ✅
+
+**The promise:** Vortix is just as powerful from a script or AI agent as it is from the TUI.
+
+**What changed:**
+
+1. **Full CLI support.** Every TUI operation has a CLI equivalent: `up`, `down`, `status`, `list`, `show`, `delete`, `rename`, `killswitch`, `completions`. The TUI is the default; every subcommand is headless CLI.
+
+2. **JSON-first output.** `--json` on every command produces a consistent envelope (`ok`, `command`, `data`, `error`, `next_actions`) — designed for `jq`, AI agents, and monitoring pipelines.
+
+3. **Agent-friendly design.** Structured errors with codes and fix hints. `next_actions` in JSON responses for self-discovery. Semantic exit codes (0-6). Idempotent operations (disconnect when disconnected = success).
+
+4. **Shell completions.** `vortix completions bash/zsh/fish` for tab completion in every major shell.
+
+5. **VpnEngine extraction.** The core VPN logic (connection lifecycle, kill switch, profiles, telemetry) is now a standalone `VpnEngine` that works headlessly. The TUI `App` delegates to it via `Deref/DerefMut`.
+
+**What this unlocks:** CI/CD pipelines, cron jobs, SSH automation, and AI coding agents can now use Vortix as a first-class VPN management tool.
+
+---
+
 ## v0.3.0 — "Set and Forget"
 
 **The promise:** Vortix manages your VPN so you don't have to think about it.
@@ -79,8 +99,6 @@ Today, Vortix is a macOS-first tool that happens to compile on Linux. v0.2.0 mak
 2. **Lifecycle hooks.** Run a script before connecting (check if on trusted network, update firewall rules) or after disconnecting (flush DNS, restart services). Vortix becomes composable with your existing workflow.
 
 3. **Profile groups.** Your 20 profiles organized into collapsible sections: "Work", "Personal", "Testing". With `g` key assignment for instant group switching.
-
-4. **Shell completions.** `vortix <tab>` just works in bash, zsh, and fish.
 
 **What this unlocks:** The "I use it every day" users. The ones who put Vortix in their dotfiles, recommend it in blog posts, and contribute back to the project.
 

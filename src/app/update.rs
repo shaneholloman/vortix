@@ -758,7 +758,7 @@ impl App {
                 details,
                 since,
                 ..
-            } = &mut self.connection_state
+            } = &mut self.engine.connection_state
             {
                 if profile == &active_name {
                     if let Some(real) = real_start {
@@ -770,7 +770,7 @@ impl App {
                                 > constants::SESSION_TIME_DRIFT_SECS
                             {
                                 *since = calculated_start;
-                                self.session_start = Some(calculated_start);
+                                self.engine.session_start = Some(calculated_start);
                             }
                         }
                     }
@@ -1034,12 +1034,14 @@ impl App {
         self.poll_network_stats();
 
         // 7. Update network stats history (O(1) ring-buffer rotation)
-        self.down_history.pop_front();
-        self.up_history.pop_front();
+        self.engine.down_history.pop_front();
+        self.engine.up_history.pop_front();
         #[allow(clippy::cast_precision_loss)]
         {
-            self.down_history.push_back(self.current_down as f64);
-            self.up_history.push_back(self.current_up as f64);
+            let down = self.engine.current_down;
+            let up = self.engine.current_up;
+            self.engine.down_history.push_back(down as f64);
+            self.engine.up_history.push_back(up as f64);
         }
     }
 
