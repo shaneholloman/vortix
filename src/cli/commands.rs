@@ -18,6 +18,7 @@ use crate::constants;
 use crate::engine::VpnEngine;
 
 /// Dispatch a CLI command. Returns `true` if handled (program should exit).
+#[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn handle_command(
     command: &Commands,
@@ -27,35 +28,16 @@ pub fn handle_command(
     mode: OutputMode,
 ) -> i32 {
     match command {
-        Commands::Up {
-            profile,
-            timeout,
-            killswitch,
-            ..
-        } => handle_up(
-            profile.as_deref(),
-            *timeout,
-            killswitch.as_deref(),
-            config,
-            config_dir,
-            mode,
-        ),
-        Commands::Down { force, .. } => handle_down(*force, config, config_dir, mode),
+        Commands::Up { profile, timeout } => {
+            handle_up(profile.as_deref(), *timeout, config, config_dir, mode)
+        }
+        Commands::Down { force } => handle_down(*force, config, config_dir, mode),
         Commands::Reconnect => handle_reconnect(config, config_dir, mode),
         Commands::Status {
             watch,
             interval,
             brief,
-            json_fields,
-        } => handle_status(
-            *watch,
-            *interval,
-            *brief,
-            json_fields.as_deref(),
-            config,
-            config_dir,
-            mode,
-        ),
+        } => handle_status(*watch, *interval, *brief, config, config_dir, mode),
         Commands::List {
             sort,
             reverse,
@@ -71,11 +53,7 @@ pub fn handle_command(
             mode,
         ),
         Commands::Import { file } => handle_import(file, mode),
-        Commands::Show {
-            profile,
-            raw,
-            no_mask,
-        } => handle_show(profile, *raw, *no_mask, config, config_dir, mode),
+        Commands::Show { profile, raw } => handle_show(profile, *raw, config, config_dir, mode),
         Commands::Delete { profile, yes } => handle_delete(profile, *yes, config, config_dir, mode),
         Commands::Rename { old, new } => handle_rename(old, new, config, config_dir, mode),
         Commands::KillSwitch { mode: ks_mode } => {
@@ -113,42 +91,39 @@ struct UpData {
     protocol: String,
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_up(
     profile: Option<&str>,
     timeout_secs: u64,
-    _killswitch: Option<&str>,
     config: &AppConfig,
     config_dir: &Path,
     mode: OutputMode,
 ) -> i32 {
     let mut engine = VpnEngine::new_headless(config.clone(), config_dir.to_path_buf());
 
-    let profile_name = match profile {
-        Some(name) => name.to_string(),
-        None => {
-            // Try last connected profile (stored in metadata)
-            engine.load_metadata();
-            match engine
-                .profiles
-                .iter()
-                .filter(|p| p.last_used.is_some())
-                .max_by_key(|p| p.last_used)
-                .map(|p| p.name.clone())
-            {
-                Some(name) => name,
-                None => {
-                    print_error_and_exit(
-                        mode,
-                        "up",
-                        CliError {
-                            code: "no_profile",
-                            message: "No profile specified and no previously used profile found"
-                                .into(),
-                            hint: Some("Specify a profile: sudo vortix up <PROFILE>".into()),
-                        },
-                        ExitCode::GeneralError,
-                    );
-                }
+    let profile_name = if let Some(name) = profile {
+        name.to_string()
+    } else {
+        engine.load_metadata();
+        match engine
+            .profiles
+            .iter()
+            .filter(|p| p.last_used.is_some())
+            .max_by_key(|p| p.last_used)
+            .map(|p| p.name.clone())
+        {
+            Some(name) => name,
+            None => {
+                print_error_and_exit(
+                    mode,
+                    "up",
+                    CliError {
+                        code: "no_profile",
+                        message: "No profile specified and no previously used profile found".into(),
+                        hint: Some("Specify a profile: sudo vortix up <PROFILE>".into()),
+                    },
+                    ExitCode::GeneralError,
+                );
             }
         }
     };
@@ -301,10 +276,10 @@ fn handle_down(force: bool, config: &AppConfig, config_dir: &Path, mode: OutputM
                 CliError {
                     code: "disconnect_failed",
                     message: e,
-                    hint: if !force {
-                        Some("Try: sudo vortix down --force".into())
-                    } else {
+                    hint: if force {
                         None
+                    } else {
+                        Some("Try: sudo vortix down --force".into())
                     },
                 },
                 ExitCode::GeneralError,
@@ -344,7 +319,7 @@ fn handle_reconnect(config: &AppConfig, config_dir: &Path, mode: OutputMode) -> 
                     let _ = engine.disconnect_and_wait(false, Duration::from_secs(15));
                 }
             }
-            handle_up(Some(&name), 20, None, config, config_dir, mode)
+            handle_up(Some(&name), 20, config, config_dir, mode)
         }
         None => {
             print_error_and_exit(
@@ -406,7 +381,6 @@ fn handle_status(
     watch: bool,
     interval: u64,
     brief: bool,
-    _json_fields: Option<&str>,
     config: &AppConfig,
     config_dir: &Path,
     mode: OutputMode,
@@ -537,7 +511,7 @@ fn run_watch(interval: u64, config: &AppConfig, config_dir: &Path, mode: OutputM
                 println!("{}", serde_json::to_string(&line).unwrap_or_default());
             }
             OutputMode::Human => {
-                // Clear line and print brief status
+                use std::io::Write;
                 if snap.connection_state == "connected" {
                     let profile = snap.profile.as_deref().unwrap_or("?");
                     print!("\r● {profile}");
@@ -550,7 +524,6 @@ fn run_watch(interval: u64, config: &AppConfig, config_dir: &Path, mode: OutputM
                 } else {
                     print!("\r○ Disconnected    ");
                 }
-                use std::io::Write;
                 let _ = std::io::stdout().flush();
             }
             OutputMode::Quiet => {}
@@ -560,6 +533,7 @@ fn run_watch(interval: u64, config: &AppConfig, config_dir: &Path, mode: OutputM
     }
 }
 
+#[allow(clippy::cast_possible_wrap)]
 fn chrono_now() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -568,7 +542,7 @@ fn chrono_now() -> String {
     // ISO 8601 UTC — computed without extra crate features
     let secs_per_min = 60u64;
     let secs_per_hour = 3600u64;
-    let secs_per_day = 86400u64;
+    let secs_per_day = 86_400u64;
 
     let total_days = now / secs_per_day;
     let time_of_day = now % secs_per_day;
@@ -581,12 +555,18 @@ fn chrono_now() -> String {
     format!("{y:04}-{m:02}-{d:02}T{hour:02}:{minute:02}:{second:02}Z")
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless
+)]
 fn days_to_ymd(days: i64) -> (i64, u32, u32) {
     // Algorithm from Howard Hinnant's date library (public domain)
-    let z = days + 719468;
-    let era = if z >= 0 { z } else { z - 146096 } / 146097;
-    let doe = (z - era * 146097) as u32;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let y = yoe as i64 + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -606,6 +586,7 @@ struct ProfileEntry {
     last_used: Option<String>,
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_list(
     sort: Option<&str>,
     reverse: bool,
@@ -622,7 +603,6 @@ fn handle_list(
     match sort.unwrap_or("name") {
         "protocol" => engine.sort_order = crate::state::ProfileSortOrder::Protocol,
         "last-used" => engine.sort_order = crate::state::ProfileSortOrder::LastUsed,
-        "name" => engine.sort_order = crate::state::ProfileSortOrder::NameAsc,
         _ => engine.sort_order = crate::state::ProfileSortOrder::NameAsc,
     }
     engine.sort_profiles();
@@ -653,8 +633,17 @@ fn handle_list(
     }
 
     if names_only {
-        for p in &profiles {
-            println!("{}", p.name);
+        match mode {
+            OutputMode::Human => {
+                for p in &profiles {
+                    println!("{}", p.name);
+                }
+            }
+            OutputMode::Json => {
+                let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+                print_success(mode, "list", &names, vec![]);
+            }
+            OutputMode::Quiet => {}
         }
         return 0;
     }
@@ -664,18 +653,19 @@ fn handle_list(
         .map(|p| ProfileEntry {
             name: p.name.clone(),
             protocol: format!("{}", p.protocol),
-            last_used: p.last_used.map(|t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| {
+            last_used: p
+                .last_used
+                .map(|t| match t.duration_since(std::time::UNIX_EPOCH) {
+                    Ok(d) => {
                         let secs = d.as_secs();
                         let elapsed = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map(|n| n.as_secs().saturating_sub(secs))
                             .unwrap_or(0);
                         format_elapsed(elapsed)
-                    })
-                    .unwrap_or_else(|_| "unknown".into())
-            }),
+                    }
+                    Err(_) => "unknown".into(),
+                }),
         })
         .collect();
 
@@ -744,10 +734,10 @@ fn format_elapsed(secs: u64) -> String {
     if secs < 3600 {
         return format!("{} min ago", secs / 60);
     }
-    if secs < 86400 {
+    if secs < 86_400 {
         return format!("{} hours ago", secs / 3600);
     }
-    format!("{} days ago", secs / 86400)
+    format!("{} days ago", secs / 86_400)
 }
 
 fn handle_import(file: &str, mode: OutputMode) -> i32 {
@@ -939,16 +929,12 @@ fn import_from_directory(dir_path: &Path, mode: OutputMode) -> i32 {
             );
         }
         OutputMode::Json => {
-            print_success(mode, "import", &imported, vec!["vortix list --json".into()])
+            print_success(mode, "import", &imported, vec!["vortix list --json".into()]);
         }
         OutputMode::Quiet => {}
     }
 
-    if failed > 0 {
-        1
-    } else {
-        0
-    }
+    i32::from(failed > 0)
 }
 
 #[derive(Serialize)]
@@ -964,27 +950,36 @@ struct ShowData {
 fn handle_show(
     profile_name: &str,
     raw: bool,
-    _no_mask: bool,
     config: &AppConfig,
     config_dir: &Path,
     mode: OutputMode,
 ) -> i32 {
     let engine = VpnEngine::new_headless(config.clone(), config_dir.to_path_buf());
-    let profile = match engine.profiles.iter().find(|p| p.name == profile_name) {
-        Some(p) => p,
-        None => print_error_and_exit(
+    let Some(profile) = engine.profiles.iter().find(|p| p.name == profile_name) else {
+        print_error_and_exit(
             mode,
             "show",
             err_not_found(profile_name),
             ExitCode::NotFound,
-        ),
+        );
     };
 
     let raw_content = if raw {
-        Some(
-            std::fs::read_to_string(&profile.config_path)
-                .unwrap_or_else(|e| format!("Error reading config: {e}")),
-        )
+        match std::fs::read_to_string(&profile.config_path) {
+            Ok(content) => Some(content),
+            Err(e) => {
+                print_error_and_exit(
+                    mode,
+                    "show",
+                    CliError {
+                        code: "io_error",
+                        message: format!("Cannot read config file: {e}"),
+                        hint: None,
+                    },
+                    ExitCode::GeneralError,
+                );
+            }
+        }
     } else {
         None
     };
@@ -1018,6 +1013,11 @@ fn handle_show(
     0
 }
 
+#[derive(Serialize)]
+struct DeleteData {
+    deleted: String,
+}
+
 fn handle_delete(
     profile_name: &str,
     yes: bool,
@@ -1027,14 +1027,13 @@ fn handle_delete(
 ) -> i32 {
     let mut engine = VpnEngine::new_headless(config.clone(), config_dir.to_path_buf());
 
-    let idx = match engine.find_profile(profile_name) {
-        Some(i) => i,
-        None => print_error_and_exit(
+    let Some(idx) = engine.find_profile(profile_name) else {
+        print_error_and_exit(
             mode,
             "delete",
             err_not_found(profile_name),
             ExitCode::NotFound,
-        ),
+        );
     };
 
     // Check if profile is active
@@ -1078,10 +1077,6 @@ fn handle_delete(
         crate::utils::cleanup_openvpn_run_files(profile_name);
     }
 
-    #[derive(Serialize)]
-    struct DeleteData {
-        deleted: String,
-    }
     let data = DeleteData {
         deleted: profile_name.to_string(),
     };
@@ -1094,6 +1089,12 @@ fn handle_delete(
     0
 }
 
+#[derive(Serialize)]
+struct RenameData {
+    old_name: String,
+    new_name: String,
+}
+
 fn handle_rename(
     old: &str,
     new: &str,
@@ -1103,10 +1104,23 @@ fn handle_rename(
 ) -> i32 {
     let mut engine = VpnEngine::new_headless(config.clone(), config_dir.to_path_buf());
 
-    let idx = match engine.find_profile(old) {
-        Some(i) => i,
-        None => print_error_and_exit(mode, "rename", err_not_found(old), ExitCode::NotFound),
+    let Some(idx) = engine.find_profile(old) else {
+        print_error_and_exit(mode, "rename", err_not_found(old), ExitCode::NotFound);
     };
+
+    let active = crate::core::scanner::get_active_profiles(&engine.profiles);
+    if active.iter().any(|s| s.name == old) {
+        print_error_and_exit(
+            mode,
+            "rename",
+            CliError {
+                code: "state_conflict",
+                message: format!("Cannot rename active profile '{old}' — disconnect first"),
+                hint: Some(format!("sudo vortix down && vortix rename {old} {new}")),
+            },
+            ExitCode::StateConflict,
+        );
+    }
 
     let trimmed = new.trim();
     if trimmed.is_empty()
@@ -1163,13 +1177,19 @@ fn handle_rename(
         engine.profiles[idx].name = trimmed.to_string();
         engine.profiles[idx].config_path = new_file;
         engine.save_metadata();
+    } else {
+        print_error_and_exit(
+            mode,
+            "rename",
+            CliError {
+                code: "invalid_path",
+                message: "Cannot determine parent directory for profile config path".into(),
+                hint: None,
+            },
+            ExitCode::GeneralError,
+        );
     }
 
-    #[derive(Serialize)]
-    struct RenameData {
-        old_name: String,
-        new_name: String,
-    }
     let data = RenameData {
         old_name: old.into(),
         new_name: trimmed.into(),
@@ -1184,6 +1204,12 @@ fn handle_rename(
 }
 
 // ── Security ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct KsData {
+    mode: String,
+    state: String,
+}
 
 fn handle_killswitch(
     mode_arg: Option<&str>,
@@ -1225,11 +1251,6 @@ fn handle_killswitch(
         engine.sync_killswitch();
     }
 
-    #[derive(Serialize)]
-    struct KsData {
-        mode: String,
-        state: String,
-    }
     let data = KsData {
         mode: format!("{:?}", engine.killswitch_mode).to_lowercase(),
         state: format!("{:?}", engine.killswitch_state).to_lowercase(),
@@ -1245,20 +1266,26 @@ fn handle_killswitch(
     0
 }
 
+#[derive(Serialize)]
+struct ReleaseData {
+    released: bool,
+}
+
 fn handle_release_killswitch(mode: OutputMode) {
     match crate::core::killswitch::disable_blocking() {
         Ok(()) => {
             crate::core::killswitch::clear_state();
-            #[derive(Serialize)]
-            struct D {
-                released: bool,
-            }
             match mode {
                 OutputMode::Human => {
                     println!("Kill switch released. Internet access restored.");
                 }
                 OutputMode::Json => {
-                    print_success(mode, "release-killswitch", &D { released: true }, vec![])
+                    print_success(
+                        mode,
+                        "release-killswitch",
+                        &ReleaseData { released: true },
+                        vec![],
+                    );
                 }
                 OutputMode::Quiet => {}
             }
@@ -1272,6 +1299,19 @@ fn handle_release_killswitch(mode: OutputMode) {
 
 // ── System ──────────────────────────────────────────────────────────────
 
+#[derive(Serialize)]
+struct InfoData {
+    version: String,
+    config_dir: String,
+    config_source: String,
+    config_status: String,
+    profiles_dir: String,
+    profile_count: u32,
+    wireguard_count: u32,
+    openvpn_count: u32,
+    is_root: bool,
+}
+
 fn handle_info(config_dir: &Path, source: &str, mode: OutputMode) {
     let profiles_dir = config_dir.join(constants::PROFILES_DIR_NAME);
     let (wg_count, ovpn_count) = count_profiles(&profiles_dir);
@@ -1283,19 +1323,6 @@ fn handle_info(config_dir: &Path, source: &str, mode: OutputMode) {
     } else {
         "defaults"
     };
-
-    #[derive(Serialize)]
-    struct InfoData {
-        version: String,
-        config_dir: String,
-        config_source: String,
-        config_status: String,
-        profiles_dir: String,
-        profile_count: u32,
-        wireguard_count: u32,
-        openvpn_count: u32,
-        is_root: bool,
-    }
 
     let data = InfoData {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -1449,6 +1476,6 @@ mod tests {
         assert_eq!(format_elapsed(30), "just now");
         assert_eq!(format_elapsed(120), "2 min ago");
         assert_eq!(format_elapsed(7200), "2 hours ago");
-        assert_eq!(format_elapsed(172800), "2 days ago");
+        assert_eq!(format_elapsed(172_800), "2 days ago");
     }
 }

@@ -79,8 +79,6 @@ fn main() -> Result<()> {
     };
 
     // Determine output mode from global flags
-    let no_color = args.no_color || std::env::var("NO_COLOR").is_ok_and(|v| !v.is_empty());
-    let _ = no_color; // Used for future color control
     let output_mode = if args.json {
         cli::output::OutputMode::Json
     } else if args.quiet {

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueHint};
 
-/// Terminal UI for WireGuard and OpenVPN — real-time telemetry, leak guarding, and kill switch.
+/// Terminal UI for `WireGuard` and `OpenVPN` — real-time telemetry, leak guarding, and kill switch.
 ///
 /// Run without arguments to launch the interactive dashboard.
 /// Use subcommands for headless CLI operations (ideal for scripts, cron, and AI agents).
@@ -24,7 +24,7 @@ use clap::{Parser, Subcommand, ValueHint};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None, after_long_help = GLOBAL_EXAMPLES)]
 pub struct Args {
-    /// Override config directory [env: VORTIX_CONFIG_DIR]
+    /// Override config directory [env: `VORTIX_CONFIG_DIR`]
     #[arg(
         short = 'C',
         long,
@@ -43,10 +43,6 @@ pub struct Args {
     #[arg(short = 'q', long, global = true)]
     pub quiet: bool,
 
-    /// Disable ANSI colors [env: NO_COLOR]
-    #[arg(long, global = true)]
-    pub no_color: bool,
-
     /// Verbose output (show debug details)
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
@@ -60,13 +56,11 @@ const GLOBAL_EXAMPLES: &str = "\
 GLOBAL FLAGS:
     -j, --json          Machine-readable JSON output
     -q, --quiet         Suppress all output except errors
-        --no-color      Disable ANSI colors [env: NO_COLOR]
     -v, --verbose       Verbose debug output
     -C, --config-dir    Override config directory
 
 ENVIRONMENT VARIABLES:
     VORTIX_CONFIG_DIR   Override config directory
-    NO_COLOR            Disable colored output
 
 EXIT CODES:
     0  Success
@@ -99,18 +93,6 @@ pub enum Commands {
         /// Connection timeout in seconds
         #[arg(long, default_value = "20", value_name = "SECS")]
         timeout: u64,
-
-        /// Disable auto-reconnect on unexpected drop
-        #[arg(long)]
-        no_reconnect: bool,
-
-        /// Return immediately after initiating connect (don't wait)
-        #[arg(long)]
-        no_wait: bool,
-
-        /// Set kill switch mode for this session [off|auto|always]
-        #[arg(long, value_name = "MODE")]
-        killswitch: Option<String>,
     },
 
     /// Disconnect from VPN
@@ -127,10 +109,6 @@ pub enum Commands {
         /// Force-kill the VPN process (SIGKILL)
         #[arg(short, long)]
         force: bool,
-
-        /// Return immediately after initiating disconnect
-        #[arg(long)]
-        no_wait: bool,
     },
 
     /// Reconnect to the last used VPN profile
@@ -153,7 +131,6 @@ pub enum Commands {
     ///     vortix status --brief                  One-line summary
     ///     vortix status --watch                  Live updates every 2s
     ///     vortix status --watch --json           NDJSON stream for monitoring
-    ///     vortix status --json --json-fields state,ip,latency
     Status {
         /// Continuously update (streams NDJSON in --json mode)
         #[arg(short, long)]
@@ -166,10 +143,6 @@ pub enum Commands {
         /// One-line status summary
         #[arg(short, long)]
         brief: bool,
-
-        /// Comma-separated fields to include in JSON output
-        #[arg(long, value_name = "FIELDS")]
-        json_fields: Option<String>,
     },
 
     /// List imported VPN profiles
@@ -178,11 +151,11 @@ pub enum Commands {
     ///
     /// EXAMPLES:
     ///     vortix list                           Table with all profiles
-    ///     vortix list --json                    JSON array of profiles
+    ///     vortix list --json                    JSON object with profiles in `.data`
     ///     vortix list --sort last-used          Most recently used first
-    ///     vortix list --protocol wireguard      Only WireGuard profiles
+    ///     vortix list --protocol wireguard      Only `WireGuard` profiles
     ///     vortix list --names-only              Profile names for scripting
-    ///     vortix list --json | jq '.[].name'    Extract names via jq
+    ///     vortix list --json | jq '.data[].name' Extract names via jq
     #[command(visible_alias = "ls")]
     List {
         /// Sort by: name, protocol, last-used [default: name]
@@ -204,15 +177,15 @@ pub enum Commands {
 
     /// Import VPN profile(s) from a file, directory, or URL
     ///
-    /// Supports .conf (WireGuard), .ovpn (OpenVPN), directories for bulk import,
+    /// Supports `.conf` (`WireGuard`), `.ovpn` (`OpenVPN`), directories for bulk import,
     /// and http/https URLs for remote config download.
     ///
     /// EXAMPLES:
-    ///     vortix import ./work.conf             Import a WireGuard profile
+    ///     vortix import ./work.conf             Import a `WireGuard` profile
     ///     vortix import ./configs/              Bulk import from directory
-    ///     vortix import https://example.com/vpn.conf
+    ///     vortix import <https://example.com/vpn.conf>
     Import {
-        /// Path to .conf/.ovpn file, directory, or URL
+        /// Path to `.conf`/`.ovpn` file, directory, or URL
         #[arg(value_hint = ValueHint::AnyPath)]
         file: String,
     },
@@ -223,7 +196,7 @@ pub enum Commands {
     ///
     /// EXAMPLES:
     ///     vortix show work-vpn                  Parsed config with masked secrets
-    ///     vortix show work-vpn --raw            Raw .conf/.ovpn file contents
+    ///     vortix show work-vpn --raw            Raw `.conf`/`.ovpn` file contents
     ///     vortix show work-vpn --json           Parsed config as JSON
     Show {
         /// Profile name
@@ -233,10 +206,6 @@ pub enum Commands {
         /// Show raw config file contents
         #[arg(long)]
         raw: bool,
-
-        /// Don't mask sensitive values (keys, passwords)
-        #[arg(long)]
-        no_mask: bool,
     },
 
     /// Delete a VPN profile

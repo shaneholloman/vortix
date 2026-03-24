@@ -73,6 +73,7 @@ impl<T: Serialize> CliResponse<T> {
 }
 
 /// Build an error response (data type doesn't matter, use `()` as placeholder).
+#[must_use]
 pub fn error_response(command: &str, err: CliError) -> CliResponse<()> {
     CliResponse {
         ok: false,
@@ -144,7 +145,8 @@ pub fn print_error_and_exit(mode: OutputMode, command: &str, err: CliError, exit
     std::process::exit(exit.code());
 }
 
-/// Convenience: build a CliError for permission denied.
+/// Convenience: build a `CliError` for permission denied.
+#[must_use]
 pub fn err_permission_denied(fix_command: &str) -> CliError {
     CliError {
         code: "permission_denied",
@@ -153,7 +155,8 @@ pub fn err_permission_denied(fix_command: &str) -> CliError {
     }
 }
 
-/// Convenience: build a CliError for profile not found.
+/// Convenience: build a `CliError` for profile not found.
+#[must_use]
 pub fn err_not_found(profile: &str) -> CliError {
     CliError {
         code: "not_found",
@@ -162,7 +165,8 @@ pub fn err_not_found(profile: &str) -> CliError {
     }
 }
 
-/// Convenience: build a CliError for missing dependencies.
+/// Convenience: build a `CliError` for missing dependencies.
+#[must_use]
 pub fn err_dependency_missing(deps: &[String]) -> CliError {
     CliError {
         code: "dependency_missing",

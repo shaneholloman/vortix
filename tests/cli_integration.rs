@@ -249,7 +249,6 @@ fn cli_status_disconnected() {
             watch: false,
             interval: 2,
             brief: true,
-            json_fields: None,
         },
         dir.path(),
         "test",

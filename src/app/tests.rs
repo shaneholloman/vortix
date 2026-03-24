@@ -1,6 +1,5 @@
 use super::*;
 use crate::core::scanner::ActiveSession;
-use std::sync::mpsc;
 use std::time::Instant;
 
 fn init_test_env() {

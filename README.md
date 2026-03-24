@@ -214,7 +214,7 @@ vortix completions zsh > ~/.zfunc/_vortix
 vortix status --json
 # {"ok":true,"command":"status","data":{...},"next_actions":[...]}
 
-vortix list --json | jq '.[].name'    # Extract profile names
+vortix list --json | jq '.data[].name'    # Extract profile names
 
 # NDJSON stream for monitoring
 vortix status --watch --json

@@ -50,12 +50,11 @@ pub struct StatusSnapshot {
 }
 
 impl VpnEngine {
-    /// Blocking connect for CLI — waits until connected or timeout.
-    pub fn connect_and_wait(
-        &mut self,
+    /// Validate preconditions for a connect and return profile metadata.
+    fn validate_connect(
+        &self,
         profile_name: &str,
-        timeout: Duration,
-    ) -> Result<ConnectResult, String> {
+    ) -> Result<(String, Protocol, std::path::PathBuf), String> {
         let idx = self
             .find_profile(profile_name)
             .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
@@ -84,7 +83,6 @@ impl VpnEngine {
             );
         }
 
-        // Check OpenVPN auth
         if matches!(protocol, Protocol::OpenVPN)
             && utils::openvpn_config_needs_auth(&config_path)
             && utils::read_openvpn_saved_auth(&name).is_none()
@@ -95,12 +93,22 @@ impl VpnEngine {
             ));
         }
 
+        Ok((name, protocol, config_path))
+    }
+
+    /// Blocking connect for CLI — waits until connected or timeout.
+    pub fn connect_and_wait(
+        &mut self,
+        profile_name: &str,
+        timeout: Duration,
+    ) -> Result<ConnectResult, String> {
+        let (name, protocol, config_path) = self.validate_connect(profile_name)?;
+
         let cmd_tx = self.cmd_tx.clone();
         let connect_timeout_secs = timeout.as_secs();
         let ovpn_verbosity = self.config.openvpn_verbosity.clone();
         let name_for_thread = name.clone();
 
-        // Spawn connect in background (same logic as TUI)
         std::thread::spawn(move || {
             Self::run_connect(
                 &name_for_thread,
@@ -117,7 +125,6 @@ impl VpnEngine {
             profile: name.clone(),
         };
 
-        // Block and poll for result
         let deadline = Instant::now() + timeout + Duration::from_secs(5);
         loop {
             match self.cmd_rx.recv_timeout(Duration::from_millis(500)) {
@@ -158,7 +165,7 @@ impl VpnEngine {
                         error,
                     });
                 }
-                Ok(_) => {} // Ignore other messages
+                Ok(_) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     if Instant::now() >= deadline {
                         self.cleanup_vpn_resources(&name);
