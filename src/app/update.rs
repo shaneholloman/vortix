@@ -552,22 +552,19 @@ impl App {
     }
 
     fn handle_quit(&mut self) {
-        // Clean up VPN resources before exiting so we don't leave
-        // dangling processes, PID files, or firewall rules behind.
-        match &self.connection_state {
-            ConnectionState::Connected { profile, .. }
-            | ConnectionState::Connecting { profile, .. }
-            | ConnectionState::Disconnecting { profile, .. } => {
-                let profile_name = profile.clone();
-                self.cleanup_vpn_resources(&profile_name);
-            }
-            ConnectionState::Disconnected => {}
-        }
-        // Release kill switch so user's network isn't blocked after exit
-        if self.killswitch_state.is_blocking() {
-            let _ = crate::core::killswitch::disable_blocking();
-        }
-        crate::core::killswitch::clear_state();
+        // VPN connections are independent OS processes (wg-quick configures the
+        // kernel; openvpn runs as a daemon). They should persist after the TUI
+        // exits so the user can reopen the TUI or run `vortix status` later.
+        // Only explicit disconnect actions (`vortix down`, disconnect button)
+        // should tear them down.
+        //
+        // Kill switch state is saved so the next launch can recover it.
+        let _ = crate::core::killswitch::save_state(
+            self.killswitch_mode,
+            self.killswitch_state,
+            None,
+            None,
+        );
         self.should_quit = true;
     }
 

@@ -302,7 +302,7 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
             ConfirmDialogConfig {
                 title: " Quit? ",
                 body: vec![Line::from(Span::styled(
-                    "VPN connection may still be active. Quit anyway?",
+                    "VPN will stay connected in the background.",
                     Style::default().fg(theme::TEXT_SECONDARY),
                 ))],
                 border_color: theme::WARNING,
