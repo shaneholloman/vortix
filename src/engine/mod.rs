@@ -79,12 +79,6 @@ pub struct VpnEngine {
     pub retry_profile_idx: Option<usize>,
     pub auto_reconnect_profile: Option<usize>,
 
-    // === Engine Mode ===
-    /// When true, Drop will NOT tear down VPN connections or clear kill switch
-    /// state. This lets CLI-established connections survive process exit so the
-    /// TUI (or a subsequent CLI invocation) can pick them up via the scanner.
-    pub(crate) headless: bool,
-
     // === Async Communication ===
     pub(crate) telemetry_rx: Option<mpsc::Receiver<TelemetryUpdate>>,
     pub(crate) telemetry_nudge: Option<mpsc::Sender<()>>,
@@ -144,8 +138,6 @@ impl VpnEngine {
             retry_count: 0,
             retry_profile_idx: None,
             auto_reconnect_profile: None,
-
-            headless: false,
 
             telemetry_rx: None,
             telemetry_nudge: None,
@@ -227,8 +219,6 @@ impl VpnEngine {
             retry_profile_idx: None,
             auto_reconnect_profile: None,
 
-            headless: true,
-
             telemetry_rx: None,
             telemetry_nudge: None,
             cmd_tx,
@@ -294,7 +284,6 @@ impl VpnEngine {
             retry_count: 0,
             retry_profile_idx: None,
             auto_reconnect_profile: None,
-            headless: false,
             telemetry_rx: None,
             telemetry_nudge: None,
             cmd_tx,
@@ -510,34 +499,12 @@ impl VpnEngine {
 
 impl Drop for VpnEngine {
     fn drop(&mut self) {
-        // Headless (CLI) engines must NOT tear down connections or kill switch
-        // state on exit. The VPN subprocess and firewall rules should persist
-        // so the TUI or a later CLI call can pick them up via the scanner.
-        if self.headless {
-            return;
-        }
-
-        if self.killswitch_state.is_blocking() {
-            let _ = crate::core::killswitch::disable_blocking();
-        }
-        crate::core::killswitch::clear_state();
-
-        match &self.connection_state {
-            ConnectionState::Connected {
-                profile, details, ..
-            } => {
-                if let Some(pid) = details.pid {
-                    let _ = std::process::Command::new("kill")
-                        .arg(pid.to_string())
-                        .output();
-                }
-                self.cleanup_vpn_resources(profile);
-            }
-            ConnectionState::Connecting { profile, .. }
-            | ConnectionState::Disconnecting { profile, .. } => {
-                self.cleanup_vpn_resources(profile);
-            }
-            ConnectionState::Disconnected => {}
-        }
+        // VPN connections are independent OS processes (wg-quick, openvpn) that
+        // should survive UI process exit. Only explicit user actions (disconnect
+        // button, `vortix down`) should tear them down. This matches the TUI's
+        // confirm dialog: "VPN connection may still be active. Quit anyway?"
+        //
+        // Kill switch firewall rules also persist — the next launch recovers
+        // them via `load_state()`.
     }
 }
