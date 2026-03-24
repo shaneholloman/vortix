@@ -156,13 +156,81 @@ After this, `sudo vortix` works as expected.
 
 ## Usage
 
+Vortix has two modes: an interactive TUI dashboard (default) and a headless CLI for scripting, automation, and AI agents.
+
 ```bash
-sudo vortix              # Launch TUI (requires root for VPN operations)
-vortix import <file>     # Import a .conf or .ovpn profile
-vortix info              # Show config directory and version
-vortix update            # Self-update to latest release
-vortix report            # Generate a bug report with system diagnostics
+sudo vortix              # Launch TUI dashboard (default)
 ```
+
+### CLI Commands
+
+Every subcommand supports `--json` for machine-readable output and `--quiet` for silent operation (exit code only).
+
+**Connection:**
+```bash
+sudo vortix up work-vpn         # Connect to a profile
+sudo vortix down                # Disconnect (graceful)
+sudo vortix down --force        # Force-disconnect (SIGKILL)
+sudo vortix reconnect           # Reconnect to last used profile
+vortix status                   # Show connection state + telemetry
+vortix status --brief           # One-line: "● Connected to work-vpn"
+vortix status --watch           # Live updates every 2s
+vortix status --watch --json    # NDJSON stream for monitoring
+```
+
+**Profile Management:**
+```bash
+vortix list                     # List all imported profiles
+vortix list --names-only        # Profile names for scripting
+vortix list --sort last-used    # Most recently used first
+vortix import ./work.conf       # Import a WireGuard profile
+vortix import ./configs/        # Bulk import from directory
+vortix show work-vpn            # Display profile configuration
+vortix show work-vpn --raw      # Raw config file contents
+vortix delete old-vpn --yes     # Delete without confirmation
+vortix rename old-vpn new-vpn   # Rename a profile
+```
+
+**Security:**
+```bash
+sudo vortix killswitch auto     # Set kill switch to auto mode
+sudo vortix killswitch always   # Always-on kill switch
+vortix killswitch               # Show current mode
+sudo vortix release-killswitch  # Emergency firewall release
+```
+
+**System:**
+```bash
+vortix info                     # Config paths, versions, profile count
+vortix update                   # Self-update from crates.io
+vortix report                   # Generate bug report
+vortix completions bash >> ~/.bashrc      # Shell completions
+vortix completions zsh > ~/.zfunc/_vortix
+```
+
+**JSON output for AI agents / scripts:**
+```bash
+# Structured JSON envelope on every command
+vortix status --json
+# {"ok":true,"command":"status","data":{...},"next_actions":[...]}
+
+vortix list --json | jq '.data[].name'    # Extract profile names
+
+# NDJSON stream for monitoring
+vortix status --watch --json
+```
+
+**Exit codes** are semantic and scriptable:
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Permission denied (needs sudo) |
+| 3 | Not found (profile doesn't exist) |
+| 4 | State conflict (already connected) |
+| 5 | Missing dependency |
+| 6 | Timeout |
 
 ### Keybindings
 

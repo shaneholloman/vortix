@@ -217,6 +217,8 @@ pub const OVPN_HEALTH_CHECK_DELAY_SECS: u64 = 2;
 pub const OVPN_PID_FILE_TIMEOUT_SECS: u64 = 3;
 /// Number of tail log lines to include in error messages when the daemon dies.
 pub const OVPN_ERROR_LOG_TAIL_LINES: usize = 5;
+/// Max seconds to wait for the `OpenVPN` daemon to exit after sending SIGTERM.
+pub const OVPN_KILL_WAIT_SECS: u64 = 10;
 /// Default `OpenVPN` `--verb` (verbosity) level passed to the daemon.
 pub const DEFAULT_OVPN_VERBOSITY: &str = "3";
 /// Subdirectory under the Vortix config dir for `OpenVPN` saved credentials.

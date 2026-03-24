@@ -552,22 +552,19 @@ impl App {
     }
 
     fn handle_quit(&mut self) {
-        // Clean up VPN resources before exiting so we don't leave
-        // dangling processes, PID files, or firewall rules behind.
-        match &self.connection_state {
-            ConnectionState::Connected { profile, .. }
-            | ConnectionState::Connecting { profile, .. }
-            | ConnectionState::Disconnecting { profile, .. } => {
-                let profile_name = profile.clone();
-                self.cleanup_vpn_resources(&profile_name);
-            }
-            ConnectionState::Disconnected => {}
-        }
-        // Release kill switch so user's network isn't blocked after exit
-        if self.killswitch_state.is_blocking() {
-            let _ = crate::core::killswitch::disable_blocking();
-        }
-        crate::core::killswitch::clear_state();
+        // VPN connections are independent OS processes (wg-quick configures the
+        // kernel; openvpn runs as a daemon). They should persist after the TUI
+        // exits so the user can reopen the TUI or run `vortix status` later.
+        // Only explicit disconnect actions (`vortix down`, disconnect button)
+        // should tear them down.
+        //
+        // Kill switch state is saved so the next launch can recover it.
+        let _ = crate::core::killswitch::save_state(
+            self.killswitch_mode,
+            self.killswitch_state,
+            None,
+            None,
+        );
         self.should_quit = true;
     }
 
@@ -758,7 +755,7 @@ impl App {
                 details,
                 since,
                 ..
-            } = &mut self.connection_state
+            } = &mut self.engine.connection_state
             {
                 if profile == &active_name {
                     if let Some(real) = real_start {
@@ -770,7 +767,7 @@ impl App {
                                 > constants::SESSION_TIME_DRIFT_SECS
                             {
                                 *since = calculated_start;
-                                self.session_start = Some(calculated_start);
+                                self.engine.session_start = Some(calculated_start);
                             }
                         }
                     }
@@ -1034,12 +1031,14 @@ impl App {
         self.poll_network_stats();
 
         // 7. Update network stats history (O(1) ring-buffer rotation)
-        self.down_history.pop_front();
-        self.up_history.pop_front();
+        self.engine.down_history.pop_front();
+        self.engine.up_history.pop_front();
         #[allow(clippy::cast_precision_loss)]
         {
-            self.down_history.push_back(self.current_down as f64);
-            self.up_history.push_back(self.current_up as f64);
+            let down = self.engine.current_down;
+            let up = self.engine.current_up;
+            self.engine.down_history.push_back(down as f64);
+            self.engine.up_history.push_back(up as f64);
         }
     }
 

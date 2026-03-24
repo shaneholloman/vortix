@@ -1,6 +1,5 @@
 use super::*;
 use crate::core::scanner::ActiveSession;
-use std::sync::mpsc;
 use std::time::Instant;
 
 fn init_test_env() {
@@ -22,29 +21,11 @@ fn init_test_env() {
 /// Build a minimal `App` for unit testing (no filesystem / scanner / telemetry).
 fn test_app() -> App {
     init_test_env();
-    let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
+    let mut engine = crate::engine::VpnEngine::new_test();
+    engine.config_dir = std::env::temp_dir().join(format!("vortix_test_{}", std::process::id()));
     App {
+        engine,
         should_quit: false,
-        connection_state: ConnectionState::Disconnected,
-        profiles: Vec::new(),
-        session_start: None,
-        down_history: std::collections::VecDeque::from(vec![0.0]),
-        up_history: std::collections::VecDeque::from(vec![0.0]),
-        current_down: 0,
-        current_up: 0,
-        latency_ms: 0,
-        packet_loss: 0.0,
-        jitter_ms: 0,
-        location: String::new(),
-        isp: String::new(),
-        dns_server: String::new(),
-        ipv6_leak: false,
-        public_ip: String::new(),
-        real_ip: None,
-        real_dns: None,
-        last_security_check: None,
-        ip_unchanged_warned: false,
-        last_connected_profile: None,
         logs_scroll: 0,
         logs_auto_scroll: true,
         logs_max_scroll: 0,
@@ -65,26 +46,6 @@ fn test_app() -> App {
         panel_areas: std::collections::HashMap::new(),
         toast: None,
         terminal_size: (80, 24),
-        is_root: false,
-        config: crate::config::AppConfig::default(),
-        config_dir: std::env::temp_dir().join(format!("vortix_test_{}", std::process::id())),
-        connection_drops: 0,
-        pending_connect: None,
-        sort_order: crate::state::ProfileSortOrder::default(),
-        killswitch_mode: crate::state::KillSwitchMode::Off,
-        killswitch_state: crate::state::KillSwitchState::Disabled,
-        retry_count: 0,
-        retry_profile_idx: None,
-        auto_reconnect_profile: None,
-        telemetry_rx: None,
-        telemetry_nudge: None,
-        cmd_tx,
-        cmd_rx,
-        scanner_rx: None,
-        netmon_rx: None,
-        netstats_rx: None,
-        last_bytes_in: 0,
-        last_bytes_out: 0,
     }
 }
 

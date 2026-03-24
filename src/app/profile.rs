@@ -193,17 +193,6 @@ impl App {
         }
     }
 
-    pub(crate) fn load_metadata(&mut self) {
-        if let Ok(metadata) = utils::load_profile_metadata() {
-            for profile in &mut self.profiles {
-                let key = profile.config_path.to_string_lossy().to_string();
-                if let Some(meta) = metadata.get(&key) {
-                    profile.last_used = meta.last_used;
-                }
-            }
-        }
-    }
-
     pub(crate) fn save_metadata(&self) {
         use std::collections::HashMap;
 

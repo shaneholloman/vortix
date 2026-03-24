@@ -78,11 +78,25 @@ fn main() -> Result<()> {
         }
     };
 
-    // Handle CLI commands (import, update, info, etc.)
+    // Determine output mode from global flags
+    let output_mode = if args.json {
+        cli::output::OutputMode::Json
+    } else if args.quiet {
+        cli::output::OutputMode::Quiet
+    } else {
+        cli::output::OutputMode::Human
+    };
+
+    // Handle CLI commands (import, update, info, status, up, down, etc.)
     if let Some(command) = &args.command {
-        if cli::commands::handle_command(command, &config_dir, config_dir_source)? {
-            return Ok(());
-        }
+        let exit_code = cli::commands::handle_command(
+            command,
+            &config_dir,
+            config_dir_source,
+            &app_config,
+            output_mode,
+        );
+        std::process::exit(exit_code);
     }
 
     // Run the TUI application

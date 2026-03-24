@@ -3,6 +3,16 @@
 //! This module contains the main [`App`] struct that manages all application state,
 //! including VPN connection status, profile management, telemetry data, and UI state.
 //!
+//! ## Architecture
+//!
+//! `App` embeds a [`VpnEngine`] that owns all VPN-related state (connection,
+//! profiles, telemetry, kill switch, retry logic). The TUI-specific state
+//! (panels, overlays, animations, scroll positions) remains directly on `App`.
+//!
+//! `App` implements `Deref<Target = VpnEngine>` and `DerefMut`, so all existing
+//! code that accesses VPN fields (`self.profiles`, `app.connection_state`, …)
+//! resolves transparently through the engine.
+//!
 //! ## Module structure
 //! - `input` — Keyboard and mouse event handling
 //! - `update` — Message dispatching (TEA-style update function)
@@ -24,15 +34,11 @@ mod tests;
 use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use std::collections::{HashMap, HashSet};
-use std::sync::mpsc;
-use std::time::Instant;
 
 use crate::constants;
-use crate::core::scanner;
-use crate::core::telemetry::{self, TelemetryUpdate};
+use crate::engine::VpnEngine;
 use crate::logger;
 use crate::message::Message;
-use crate::utils;
 
 // Re-export state types for convenient access
 pub use crate::state::{
@@ -42,70 +48,27 @@ pub use crate::state::{
 
 /// Main application state container.
 ///
-/// The `App` struct holds all state for the Vortix TUI application including
-/// VPN connection status, loaded profiles, network telemetry, and UI state.
-///
-/// # Example
-///
-/// ```ignore
-/// let mut app = App::new();
-/// app.connect_by_name("my-vpn-profile");
-/// ```
+/// Holds the VPN engine (all VPN state) and TUI-specific state (panels,
+/// overlays, animations). Implements `Deref`/`DerefMut` to `VpnEngine` so
+/// that VPN field accesses are transparent.
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
+    /// The headless VPN engine — owns all VPN state and operations.
+    pub engine: VpnEngine,
+
     /// Flag indicating the application should exit.
     pub should_quit: bool,
 
-    // === VPN State ===
-    /// Current VPN connection state.
-    pub connection_state: ConnectionState,
-    /// Loaded VPN profiles.
-    pub profiles: Vec<VpnProfile>,
-    /// When the current session started.
-    pub session_start: Option<Instant>,
-
-    // === Network Telemetry ===
-    /// Historical download throughput values for charting (y-values only; x is the index).
-    pub down_history: std::collections::VecDeque<f64>,
-    /// Historical upload throughput values for charting (y-values only; x is the index).
-    pub up_history: std::collections::VecDeque<f64>,
-    /// Current download rate in bytes/second.
-    pub current_down: u64,
-    /// Current upload rate in bytes/second.
-    pub current_up: u64,
-    pub latency_ms: u64,
-    pub packet_loss: f32,
-    pub jitter_ms: u64,
-    pub location: String,
-    pub isp: String,
-    pub dns_server: String,
-    pub ipv6_leak: bool,
-
-    // === System Info ===
-    pub public_ip: String,
-    /// Real IP captured when disconnected (for comparison when connected)
-    pub real_ip: Option<String>,
-    /// DNS server captured when disconnected (for leak comparison when connected)
-    pub real_dns: Option<String>,
-    /// When the last security telemetry update was received.
-    pub last_security_check: Option<Instant>,
-    /// Suppresses duplicate "IP unchanged" warnings after the first per session.
-    pub ip_unchanged_warned: bool,
-    /// Name of the last successfully connected profile (for reconnect from Disconnected).
-    pub last_connected_profile: Option<String>,
-    /// Scroll position for logs panel (visual line offset with wrapping)
+    // === Logs UI State ===
     pub logs_scroll: u16,
     pub logs_auto_scroll: bool,
-    /// Max scroll offset (computed during render based on wrapped line count)
     pub logs_max_scroll: u16,
     pub log_level_filter: Option<crate::logger::LogLevel>,
 
     // === UI State (Panel-based) ===
     pub focused_panel: FocusedPanel,
     pub zoomed_panel: Option<FocusedPanel>,
-    /// Panels currently showing their back (detailed) view.
     pub panel_flipped: HashSet<FocusedPanel>,
-    /// Active flip animation (if any).
     pub flip_animation: Option<FlipAnimation>,
     pub input_mode: InputMode,
     pub show_config: bool,
@@ -114,98 +77,51 @@ pub struct App {
     pub action_menu_state: ratatui::widgets::ListState,
     pub config_scroll: u16,
     pub cached_config_content: Option<String>,
-    /// Number of profiles matching the current search query.
     pub search_match_count: usize,
     pub profile_list_state: TableState,
     pub panel_areas: HashMap<FocusedPanel, Rect>,
     pub toast: Option<Toast>,
     pub terminal_size: (u16, u16),
-    pub is_root: bool,
-    /// User-configurable application settings.
-    pub config: crate::config::AppConfig,
-    /// Resolved config directory path.
-    pub config_dir: std::path::PathBuf,
-    /// Number of connection drops detected this session.
-    pub connection_drops: u32,
-    /// Profile index queued for auto-connect after current disconnect completes.
-    pub pending_connect: Option<usize>,
-    /// Current sort order for the profile list.
-    pub sort_order: ProfileSortOrder,
+}
 
-    // === Kill Switch ===
-    /// Kill switch operating mode (Off, Auto, `AlwaysOn`).
-    pub killswitch_mode: crate::state::KillSwitchMode,
-    /// Current kill switch state (Disabled, Armed, Blocking).
-    pub killswitch_state: crate::state::KillSwitchState,
+// Allow transparent access to VpnEngine fields from App.
+// `self.profiles`, `app.connection_state`, etc. all resolve through the engine.
+impl std::ops::Deref for App {
+    type Target = VpnEngine;
+    fn deref(&self) -> &VpnEngine {
+        &self.engine
+    }
+}
 
-    // === Connection Retry & Auto-Reconnect ===
-    /// Current retry attempt number (0 = no retry in progress).
-    pub retry_count: u32,
-    /// Profile index being retried (set when a retry timer is active).
-    pub retry_profile_idx: Option<usize>,
-    /// Profile index to auto-reconnect to after an unexpected VPN drop.
-    pub auto_reconnect_profile: Option<usize>,
-
-    // === Async Communication ===
-    telemetry_rx: Option<mpsc::Receiver<TelemetryUpdate>>,
-    /// Send `()` to wake the telemetry worker immediately (e.g. after connect/disconnect).
-    telemetry_nudge: Option<mpsc::Sender<()>>,
-    pub(crate) cmd_tx: mpsc::Sender<Message>,
-    cmd_rx: mpsc::Receiver<Message>,
-
-    // --- Spawn-on-demand background work (no long-running threads) ---
-    /// Receiver for the latest scanner result. `Some` = scan in flight or result ready.
-    scanner_rx: Option<mpsc::Receiver<Vec<scanner::ActiveSession>>>,
-    /// Receiver for network change events (gateway changes).
-    netmon_rx: Option<mpsc::Receiver<crate::core::network_monitor::NetworkEvent>>,
-    /// Receiver for the latest raw network byte totals. `Some` = fetch in flight.
-    netstats_rx: Option<mpsc::Receiver<(u64, u64)>>,
-    /// Last total bytes-in reading (for delta calculation).
-    last_bytes_in: u64,
-    /// Last total bytes-out reading (for delta calculation).
-    last_bytes_out: u64,
+impl std::ops::DerefMut for App {
+    fn deref_mut(&mut self) -> &mut VpnEngine {
+        &mut self.engine
+    }
 }
 
 impl App {
     /// Create a new App instance with the given configuration.
-    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new(config: crate::config::AppConfig, config_dir: std::path::PathBuf) -> Self {
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
-        let history_size = constants::NETWORK_HISTORY_SIZE;
-        let down_history = std::collections::VecDeque::from(vec![0.0; history_size]);
-        let up_history = std::collections::VecDeque::from(vec![0.0; history_size]);
+        let mut engine = VpnEngine::new(config, config_dir);
+
+        // Load metadata and sort
+        engine.load_metadata();
+        engine.sort_profiles();
+
+        // Apply user's logging preferences
+        logger::configure(&engine.config.log_level, engine.config.max_log_entries);
+
         let mut app = Self {
+            engine,
+
             should_quit: false,
 
-            connection_state: ConnectionState::Disconnected,
-            profiles: Vec::new(),
-            session_start: None,
-
-            down_history,
-            up_history,
-            current_down: 0,
-            current_up: 0,
-            latency_ms: 0,
-            packet_loss: 0.0,
-            jitter_ms: 0,
-            location: "Detecting...".to_string(),
-            isp: "Detecting...".to_string(),
-            dns_server: "Detecting...".to_string(),
-            ipv6_leak: false,
-
-            public_ip: "Detecting...".to_string(),
-            real_ip: None,
-            real_dns: None,
-            last_security_check: None,
-            ip_unchanged_warned: false,
-            last_connected_profile: None,
             logs_scroll: 0,
             logs_auto_scroll: true,
             logs_max_scroll: 0,
             log_level_filter: None,
 
-            // Panel-based UI state
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,
             panel_flipped: HashSet::new(),
@@ -222,59 +138,12 @@ impl App {
             panel_areas: HashMap::new(),
             toast: None,
             terminal_size: (0, 0),
-            is_root: utils::is_root(),
-            config,
-            config_dir,
-            connection_drops: 0,
-            pending_connect: None,
-            sort_order: ProfileSortOrder::default(),
-
-            // Kill switch - load from persisted state for crash recovery
-            killswitch_mode: crate::state::KillSwitchMode::default(),
-            killswitch_state: crate::state::KillSwitchState::default(),
-
-            retry_count: 0,
-            retry_profile_idx: None,
-            auto_reconnect_profile: None,
-
-            telemetry_rx: None,
-            telemetry_nudge: None,
-            cmd_tx,
-            cmd_rx,
-            scanner_rx: None,
-            netmon_rx: None,
-            netstats_rx: None,
-            last_bytes_in: 0,
-            last_bytes_out: 0,
         };
-
-        // Recover kill switch state from crash if persisted
-        if let Some(persisted) = crate::core::killswitch::load_state() {
-            app.killswitch_mode = persisted.mode;
-            // If we were blocking when crashed, release it now
-            if persisted.state == crate::state::KillSwitchState::Blocking {
-                app.log("WARN: Kill switch was blocking when app crashed. Releasing...");
-                let _ = crate::core::killswitch::disable_blocking();
-                app.killswitch_state = crate::state::KillSwitchState::Disabled;
-                crate::core::killswitch::clear_state();
-            } else {
-                app.killswitch_state = persisted.state;
-            }
-        }
-
-        // Load profiles from ~/.config/vortix/profiles/
-        app.profiles = crate::vpn::load_profiles();
-
-        app.load_metadata();
-        app.sort_profiles();
 
         // Select first profile if available
         if !app.profiles.is_empty() {
             app.profile_list_state.select(Some(0));
         }
-
-        // Apply user's logging preferences
-        logger::configure(&app.config.log_level, app.config.max_log_entries);
 
         // Initialize logs with boot sequence
         app.log(&format!(
@@ -284,30 +153,21 @@ impl App {
         ));
         app.log(constants::MSG_BACKEND_INIT);
 
-        // Log auto-save location
         {
-            let log_path = app.config_dir.join(constants::LOGS_DIR_NAME);
+            let log_path = app.engine.config_dir.join(constants::LOGS_DIR_NAME);
             app.log(&format!("IO: Auto-logging to {}", log_path.display()));
+        }
+
+        // Log kill switch recovery if it happened
+        if app.engine.killswitch_state == crate::state::KillSwitchState::Disabled {
+            // Check if we recovered from crash — the engine already handled this
         }
 
         app.log("SUCCESS: System active. Press [x] for actions.");
 
-        // Check for required system dependencies at startup
         app.check_system_dependencies();
 
-        // Start background telemetry worker
-        let telemetry_config = telemetry::TelemetryConfig::from(&app.config);
-        let (telem_rx, telem_nudge) = telemetry::spawn_telemetry_worker(telemetry_config);
-        app.telemetry_rx = Some(telem_rx);
-        app.telemetry_nudge = Some(telem_nudge);
-
-        // Start network change monitor for auto-reconnect
-        let netmon_rx = crate::core::network_monitor::spawn_network_monitor(
-            std::time::Duration::from_secs(constants::NETWORK_MONITOR_POLL_SECS),
-        );
-        app.netmon_rx = Some(netmon_rx);
-
-        app.process_external(); // Flush any early messages
+        app.process_external();
 
         app
     }
@@ -318,19 +178,15 @@ impl App {
     }
 
     /// Process all pending external events (telemetry and background commands).
-    /// Called by main loop to ensure background feedback appears immediately.
     pub fn process_external(&mut self) {
-        // 1. Process Telemetry
         self.process_telemetry();
 
-        // 2. Process Command Feedback
-        while let Ok(msg) = self.cmd_rx.try_recv() {
+        while let Ok(msg) = self.engine.cmd_rx.try_recv() {
             self.handle_message(msg);
         }
     }
 
     /// Called when terminal is resized.
-    /// In TEA, this dispatches a Resize message.
     pub fn on_resize(&mut self, width: u16, height: u16) {
         self.handle_message(Message::Resize(width, height));
     }
@@ -338,7 +194,6 @@ impl App {
     /// Check if a specific panel should be drawn as focused (visually)
     #[must_use]
     pub fn should_draw_focus(&self, panel: &FocusedPanel) -> bool {
-        // If an overlay is active, no background panel has focus
         if self.show_config
             || self.show_action_menu
             || self.show_bulk_menu
@@ -346,11 +201,9 @@ impl App {
         {
             return false;
         }
-        // If Zoom is active, ONLY the zoomed panel has focus
         if let Some(zoomed) = &self.zoomed_panel {
             return *zoomed == *panel;
         }
-        // Otherwise, standard focus
         self.focused_panel == *panel
     }
 
@@ -397,40 +250,20 @@ impl App {
 }
 
 impl App {
-    /// Lightweight constructor for testing: creates channels but spawns no
-    /// background threads (telemetry, scanner, network monitor).
+    /// Lightweight constructor for testing.
     #[must_use]
     pub fn new_test() -> Self {
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Message>();
-        let history_size = constants::NETWORK_HISTORY_SIZE;
-        let down_history = std::collections::VecDeque::from(vec![0.0; history_size]);
-        let up_history = std::collections::VecDeque::from(vec![0.0; history_size]);
+        let engine = VpnEngine::new_test();
         Self {
+            engine,
+
             should_quit: false,
-            connection_state: ConnectionState::Disconnected,
-            profiles: Vec::new(),
-            session_start: None,
-            down_history,
-            up_history,
-            current_down: 0,
-            current_up: 0,
-            latency_ms: 0,
-            packet_loss: 0.0,
-            jitter_ms: 0,
-            location: String::new(),
-            isp: String::new(),
-            dns_server: String::new(),
-            ipv6_leak: false,
-            public_ip: String::new(),
-            real_ip: None,
-            real_dns: None,
-            last_security_check: None,
-            ip_unchanged_warned: false,
-            last_connected_profile: None,
+
             logs_scroll: 0,
             logs_auto_scroll: true,
             logs_max_scroll: 0,
             log_level_filter: None,
+
             focused_panel: FocusedPanel::Sidebar,
             zoomed_panel: None,
             panel_flipped: HashSet::new(),
@@ -447,56 +280,14 @@ impl App {
             panel_areas: HashMap::new(),
             toast: None,
             terminal_size: (80, 24),
-            is_root: false,
-            config: crate::config::AppConfig::default(),
-            config_dir: std::env::temp_dir().join("vortix_test"),
-            connection_drops: 0,
-            pending_connect: None,
-            sort_order: ProfileSortOrder::default(),
-            killswitch_mode: crate::state::KillSwitchMode::Off,
-            killswitch_state: crate::state::KillSwitchState::Disabled,
-            retry_count: 0,
-            retry_profile_idx: None,
-            auto_reconnect_profile: None,
-            telemetry_rx: None,
-            telemetry_nudge: None,
-            cmd_tx,
-            cmd_rx,
-            scanner_rx: None,
-            netmon_rx: None,
-            netstats_rx: None,
-            last_bytes_in: 0,
-            last_bytes_out: 0,
         }
     }
 }
 
 impl Drop for App {
     fn drop(&mut self) {
-        // Safety net: clean up firewall rules and VPN processes even on panic.
-        // Idempotent with handle_quit — if quit already ran, these are no-ops.
-        if self.killswitch_state.is_blocking() {
-            let _ = crate::core::killswitch::disable_blocking();
-        }
-        crate::core::killswitch::clear_state();
-
-        match &self.connection_state {
-            ConnectionState::Connected {
-                profile, details, ..
-            } => {
-                if let Some(pid) = details.pid {
-                    let _ = std::process::Command::new("kill")
-                        .arg(pid.to_string())
-                        .output();
-                }
-                self.cleanup_vpn_resources(profile);
-            }
-            ConnectionState::Connecting { profile, .. }
-            | ConnectionState::Disconnecting { profile, .. } => {
-                self.cleanup_vpn_resources(profile);
-            }
-            ConnectionState::Disconnected => {}
-        }
+        // VpnEngine's Drop handles kill switch cleanup and VPN process termination.
+        // Nothing additional needed here.
     }
 }
 
