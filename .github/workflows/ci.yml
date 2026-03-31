@@ -25,6 +25,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check
 
+  check-fedora:
+    name: Check (fedora-latest)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - name: Bootstrap Fedora container
+        run: dnf install -y ca-certificates curl gcc gcc-c++ git make pkgconf-pkg-config which
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -52,6 +68,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings
 
+  clippy-fedora:
+    name: Clippy (fedora-latest)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - name: Bootstrap Fedora container
+        run: dnf install -y ca-certificates curl gcc gcc-c++ git make pkgconf-pkg-config which
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets -- -D warnings
+
   test:
     name: Test (${{ matrix.os }})
     strategy:
@@ -73,6 +105,22 @@ jobs:
         run: brew install wireguard-tools openvpn
       - run: cargo test
 
+  test-fedora:
+    name: Test (fedora-latest)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - name: Bootstrap Fedora container
+        run: dnf install -y ca-certificates curl gcc gcc-c++ git make nftables openvpn pkgconf-pkg-config which wireguard-tools
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+
   docs:
     name: Docs (${{ matrix.os }})
     strategy:
@@ -85,6 +133,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.91.0"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  docs-fedora:
+    name: Docs (fedora-latest)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - name: Bootstrap Fedora container
+        run: dnf install -y ca-certificates curl gcc gcc-c++ git make pkgconf-pkg-config which
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps
         env:
