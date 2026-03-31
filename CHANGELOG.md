@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-31
+
+### Added
+
+- Add a CLI-first headless mode with structured JSON output for scripting, automation, and AI-agent workflows, including `vortix status` for scriptable connection and kill-switch visibility ([#156](https://github.com/Harry-kp/vortix/issues/156), [#176](https://github.com/Harry-kp/vortix/pull/176)).
+- Add the new flip-panel dashboard interaction with animated card transitions ([#165](https://github.com/Harry-kp/vortix/pull/165)).
+
+### Changed
+
+- VPN sessions can now keep running after the TUI or CLI exits, so leaving the interface no longer tears down an active connection unexpectedly ([#155](https://github.com/Harry-kp/vortix/issues/155), [#176](https://github.com/Harry-kp/vortix/pull/176)).
+- Make `vortix down` wait for the OpenVPN daemon to fully exit before reporting success ([#176](https://github.com/Harry-kp/vortix/pull/176)).
+
+### Fixed
+
+- Remove the stale quit confirmation now that active connections can continue independently of the UI process ([#179](https://github.com/Harry-kp/vortix/issues/179), [#182](https://github.com/Harry-kp/vortix/pull/182)).
+- Fix help overlay scrolling edge cases, including opening before the first resize and clamping scroll correctly after keyboard and mouse input ([#180](https://github.com/Harry-kp/vortix/issues/180), [#182](https://github.com/Harry-kp/vortix/pull/182)).
+- Harden CLI lifecycle handling around disconnect flow, error paths, and config isolation ([#176](https://github.com/Harry-kp/vortix/pull/176)).
+
+### Documentation
+
+- Clarify current Linux support expectations and improve Linux bug-reporting guidance for distro-specific issues ([#185](https://github.com/Harry-kp/vortix/pull/185)).
+
+### CI
+
+- Add Fedora 41 CI coverage for `cargo check`, `cargo clippy`, `cargo test`, and `cargo doc`, including unprivileged test execution for Linux-specific validation ([#160](https://github.com/Harry-kp/vortix/issues/160), [#183](https://github.com/Harry-kp/vortix/pull/183)).
+
+
+
 ## [0.1.8] - 2026-03-19
 
 ### Features
