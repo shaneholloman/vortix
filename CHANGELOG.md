@@ -9,18 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-03-31
 
-### Highlights
+### Added
 
-- Add a CLI-first headless mode with JSON output, making Vortix easier to script and automate.
-- Let VPN connections keep running after the TUI or CLI exits, so quitting Vortix no longer tears down an active session unexpectedly.
-- Introduce the new flip-panel dashboard interaction with animated card transitions ([#165](https://github.com/Harry-kp/vortix/pull/165)).
+- Add a CLI-first headless mode with structured JSON output for scripting, automation, and AI-agent workflows.
+- Add the new flip-panel dashboard interaction with animated card transitions ([#165](https://github.com/Harry-kp/vortix/pull/165)).
 
-### Improvements
+### Changed
 
+- VPN sessions can now keep running after the TUI or CLI exits, so leaving the interface no longer tears down an active connection unexpectedly.
+- Remove the stale quit confirmation because connection lifecycle is now decoupled from the UI process.
 - Make `vortix down` wait for the OpenVPN daemon to fully exit before reporting success.
-- Remove the stale quit confirmation now that active connections can continue independently of the UI process.
-- Fix help overlay scrolling edge cases, including opening before the first resize and clamping scroll correctly.
-- Tighten tests and internal error handling around CLI lifecycle behavior and edge cases.
+
+### Fixed
+
+- Fix help overlay scrolling edge cases, including opening before the first resize and clamping scroll correctly after keyboard and mouse input.
+- Harden CLI lifecycle handling and related tests around disconnect flow, error paths, and config isolation.
+
+### Documentation
+
+- Clarify current Linux support expectations and improve Linux bug-reporting guidance for distro-specific issues.
+
+### CI
+
+- Add Fedora 41 CI coverage for `cargo check`, `cargo clippy`, `cargo test`, and `cargo doc`, including unprivileged test execution for Linux-specific validation.
 
 
 
