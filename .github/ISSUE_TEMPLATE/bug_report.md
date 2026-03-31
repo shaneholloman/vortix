@@ -35,6 +35,16 @@ Shell:        [shell]
 Running as:   [user / root]
 ```
 
+### Linux-specific details (if applicable)
+
+```
+Distro:       [Ubuntu / Fedora / Arch / etc]
+Kernel:       [kernel version]
+Firewall:     [iptables / nftables / firewalld / unknown]
+DNS stack:    [systemd-resolved / NetworkManager / resolv.conf / unknown]
+Privilege:    [sudo vortix / root shell / other]
+```
+
 ## Dependencies
 <!--
 Tip: Run `vortix report` to auto-detect these.
@@ -59,3 +69,5 @@ Kill switch: [state]
 
 ## Additional Context
 <!-- Screenshots, error messages, log snippets (please redact any IPs or server endpoints) -->
+
+If this is a Linux issue, mention whether you can reproduce it consistently and whether it happens on a distro package install or only on a source/binary install.
