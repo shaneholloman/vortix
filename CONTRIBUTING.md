@@ -19,6 +19,18 @@ sudo cargo run
 - 🧪 **Add tests** — Unit tests, integration tests
 - 🍎 **Linux support** — Help port macOS-specific code
 
+## Linux Help Wanted
+
+Vortix is developed primarily on macOS, so Linux users can have outsized impact.
+
+Ways Linux contributors can help:
+- Test PRs and release candidates on Ubuntu, Fedora, and Arch
+- Report distro-specific issues around firewall backends, DNS detection, and privilege handling
+- Contribute fixes for Linux-only regressions
+- Share packaging and install feedback from real systems
+
+If you regularly use Vortix on Linux and want to help more deeply, start in the [Linux tester discussion](https://github.com/Harry-kp/vortix/discussions/184) with your distro and what you are willing to test.
+
 ## Development Workflow
 
 1. Fork the repo
@@ -55,6 +67,13 @@ cargo test
 # Run with demo mode (masks sensitive data)
 sudo cargo run -- --demo
 ```
+
+For Linux bug reports, include as much of the following as possible:
+- distro + version
+- kernel version
+- install method (`cargo`, Homebrew, npm, package manager, binary installer)
+- `vortix report`
+- whether your system uses `iptables`, `nftables`, `firewalld`, `NetworkManager`, or `systemd-resolved`
 
 ## Questions?
 

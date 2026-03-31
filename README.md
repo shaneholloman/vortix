@@ -49,6 +49,14 @@ Existing options (`wg show`, NetworkManager, Tunnelblick) either lack real-time 
 - **Config Viewer** — Inspect profile configurations directly within the TUI
 - **Keyboard-driven** — No mouse required
 
+## Platform Support
+
+Vortix is actively developed and used primarily on macOS.
+
+Linux support is a current focus and is improving quickly, with CI coverage for Ubuntu and Fedora. Linux environments still vary a lot across distributions, firewall backends, DNS tooling, and privilege models, so distro-specific issues may still exist.
+
+If you use Vortix on Linux and hit a problem, please open an issue and include `vortix report` output when possible. Ubuntu, Fedora, and Arch users are especially helpful when testing release candidates and validating fixes before release. If you want to help test Linux support, join the [Linux tester discussion](https://github.com/Harry-kp/vortix/discussions/184).
+
 ## Requirements
 
 ### Runtime dependencies
@@ -153,6 +161,10 @@ After this, `sudo vortix` works as expected.
 - `npm install -g` (npm) — **no**, installs to npm global bin
 - Nix (`nix profile install`) — **no**, installs to Nix profile bin
 - macOS — **no**, sudo preserves user PATH
+
+### Linux support note
+
+Most day-to-day development happens on macOS. Linux support is continuously tested in CI, but real-world distro coverage is still growing. If something behaves differently on your Linux setup, please treat that as useful signal and report it rather than assuming it is expected.
 
 ## Usage
 
