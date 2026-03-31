@@ -124,7 +124,7 @@ pub fn render(frame: &mut Frame, scroll: u16) {
         }
     }
 
-    debug_assert_eq!(lines.len() as u16, total_lines());
+    debug_assert_eq!(u16::try_from(lines.len()), Ok(total_lines()));
 
     let max_scroll = state::help_max_scroll_for_terminal_height(area.height, total_lines());
     let clamped_scroll = scroll.min(max_scroll);
