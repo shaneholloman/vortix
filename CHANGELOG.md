@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-03-31
+
+### Bug Fixes
+
+- Use checked_sub for Instant subtraction in tests
+- Address Copilot review — try_next error handling, edge cases
+- CLI connections no longer killed on process exit
+- VPN connections now persist across TUI and CLI process exits
+- Remove VPN teardown from TUI quit handler
+- Import test no longer writes to real config directory
+- CLI disconnect now waits for OpenVPN daemon to actually exit
+- Resolve all clippy warnings and Copilot review feedback
+- Backtick-wrap VpnEngine in test doc comment
+- Remove stale quit confirmation and bound help scroll
+- Initialize help scroll bounds before first resize
+- Avoid truncating cast in help overlay debug assert
+- Address Copilot review feedback on help overlay
+
+### Features
+
+- Add flip panel with animated card-flip transition ([#165](https://github.com/Harry-kp/vortix/pull/165))
+- Add CLI-first headless mode with JSON output, agent-friendly design
+
+
+
 ## [0.1.8] - 2026-03-19
 
 ### Features
