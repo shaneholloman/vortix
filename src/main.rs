@@ -189,6 +189,8 @@ fn run_tui(
     let tick_rate = config.tick_rate;
     let mut app = App::new(config, config_dir);
     let events = EventHandler::new(tick_rate);
+    let size = terminal.size()?;
+    app.on_resize(size.width, size.height);
 
     // Initial draw
     app.process_external();

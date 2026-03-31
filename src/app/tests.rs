@@ -1421,6 +1421,19 @@ fn test_help_scroll_down_clamps_at_max() {
 }
 
 #[test]
+fn test_help_scroll_does_not_move_when_terminal_size_unknown() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let mut app = test_app();
+    app.terminal_size = (0, 0);
+    app.input_mode = InputMode::Help { scroll: 0 };
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+
+    assert!(matches!(app.input_mode, InputMode::Help { scroll: 0 }));
+}
+
+#[test]
 fn test_help_end_jumps_to_max_scroll() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
