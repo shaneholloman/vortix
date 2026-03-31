@@ -8,6 +8,8 @@ mod widgets;
 use crate::app::App;
 use ratatui::Frame;
 
+pub(crate) use overlays::help::total_lines as help_total_lines;
+
 /// Main render function - dispatches to appropriate view
 pub fn render(frame: &mut Frame, app: &mut App) {
     // Base view
