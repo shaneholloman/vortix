@@ -112,14 +112,16 @@ jobs:
       image: fedora:latest
     steps:
       - name: Bootstrap Fedora container
-        run: dnf install -y ca-certificates curl gcc gcc-c++ git make nftables openvpn pkgconf-pkg-config which wireguard-tools
+        run: |
+          dnf install -y ca-certificates curl gcc gcc-c++ git make nftables openvpn pkgconf-pkg-config shadow-utils which wireguard-tools
+          useradd -m tester
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+          su - tester -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.91.0'
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test
+      - run: su - tester -c "cd \"$GITHUB_WORKSPACE\" && source \"\$HOME/.cargo/env\" && cargo test"
 
   docs:
     name: Docs (${{ matrix.os }})
