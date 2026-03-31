@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 /// Duration for toast notifications to remain visible.
 pub const DISMISS_DURATION: Duration = Duration::from_secs(4);
+pub const HELP_OVERLAY_MAX_HEIGHT: u16 = 38;
 
 /// Currently focused UI panel for keyboard navigation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -95,11 +96,6 @@ pub enum InputMode {
         to_name: String,
         confirm_selected: bool,
     },
-    /// Confirmation dialog before quitting while VPN is connected.
-    ConfirmQuit {
-        /// Is "Yes" currently selected?
-        confirm_selected: bool,
-    },
     /// `OpenVPN` authentication credentials dialog.
     AuthPrompt {
         /// Index of the profile requiring auth.
@@ -121,6 +117,15 @@ pub enum InputMode {
         /// Whether to auto-connect after submitting (false = save-only mode).
         connect_after: bool,
     },
+}
+
+#[must_use]
+pub fn help_max_scroll_for_terminal_height(terminal_height: u16, total_lines: u16) -> u16 {
+    let overlay_height = terminal_height
+        .saturating_sub(2)
+        .min(HELP_OVERLAY_MAX_HEIGHT);
+    let inner_height = overlay_height.saturating_sub(2);
+    total_lines.saturating_sub(inner_height)
 }
 
 /// State for the panel flip animation.

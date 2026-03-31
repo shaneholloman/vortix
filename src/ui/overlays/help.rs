@@ -1,6 +1,6 @@
 //! Help overlay showing all keybindings
 
-use crate::theme;
+use crate::{state, theme};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -65,10 +65,25 @@ const HELP_TEXT: &[(&str, &[(&str, &str)])] = &[
     ),
 ];
 
+#[must_use]
+pub fn total_lines() -> u16 {
+    #[allow(clippy::cast_possible_truncation)]
+    {
+        HELP_TEXT
+            .iter()
+            .enumerate()
+            .map(|(section_idx, (_, bindings))| bindings.len() + 2 + usize::from(section_idx > 0))
+            .sum::<usize>() as u16
+    }
+}
+
 pub fn render(frame: &mut Frame, scroll: u16) {
     let area = frame.area();
     let width = area.width.saturating_sub(4).min(65);
-    let height = area.height.saturating_sub(2).min(38);
+    let height = area
+        .height
+        .saturating_sub(2)
+        .min(state::HELP_OVERLAY_MAX_HEIGHT);
     if width == 0 || height == 0 {
         return;
     }
@@ -109,10 +124,9 @@ pub fn render(frame: &mut Frame, scroll: u16) {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    let total_lines = lines.len() as u16;
-    let inner_height = height.saturating_sub(2); // borders
-    let max_scroll = total_lines.saturating_sub(inner_height);
+    debug_assert_eq!(lines.len() as u16, total_lines());
+
+    let max_scroll = state::help_max_scroll_for_terminal_height(area.height, total_lines());
     let clamped_scroll = scroll.min(max_scroll);
 
     let can_scroll_down = clamped_scroll < max_scroll;

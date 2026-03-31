@@ -297,20 +297,6 @@ fn render_overlays(frame: &mut Frame, app: &mut App) {
                 },
             );
         }
-        InputMode::ConfirmQuit { confirm_selected } => confirm_dialog::render(
-            frame,
-            ConfirmDialogConfig {
-                title: " Quit? ",
-                body: vec![Line::from(Span::styled(
-                    "VPN will stay connected in the background.",
-                    Style::default().fg(theme::TEXT_SECONDARY),
-                ))],
-                border_color: theme::WARNING,
-                confirm_selected: *confirm_selected,
-                width: 46,
-                height: 6,
-            },
-        ),
         InputMode::Normal => {}
     }
 

@@ -16,6 +16,6 @@ pub use connection::{ConnectionState, DetailedConnectionInfo};
 pub use killswitch::{KillSwitchMode, KillSwitchState};
 pub use profile::{Protocol, VpnProfile};
 pub use ui::{
-    AuthField, FlipAnimation, FocusedPanel, InputMode, ProfileSortOrder, QualityLevel, Toast,
-    ToastType, DISMISS_DURATION,
+    help_max_scroll_for_terminal_height, AuthField, FlipAnimation, FocusedPanel, InputMode,
+    ProfileSortOrder, QualityLevel, Toast, ToastType, DISMISS_DURATION, HELP_OVERLAY_MAX_HEIGHT,
 };

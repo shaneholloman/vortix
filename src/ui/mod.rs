@@ -2,7 +2,7 @@
 
 mod dashboard;
 mod helpers;
-mod overlays;
+pub(crate) mod overlays;
 mod widgets;
 
 use crate::app::App;

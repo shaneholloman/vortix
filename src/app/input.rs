@@ -2,9 +2,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::{App, AuthField, ConnectionState, FocusedPanel, InputMode, ToastType};
+use super::{App, AuthField, FocusedPanel, InputMode, ToastType};
 use crate::constants;
 use crate::message::{self, Message, ScrollMove, SelectionMove};
+use crate::state::help_max_scroll_for_terminal_height;
 
 enum ConfirmAction {
     Confirmed,
@@ -49,18 +50,9 @@ impl App {
             self.handle_message(Message::Quit);
             return;
         }
-        // 'q' in normal mode: confirm first when VPN is active.
+        // 'q' in normal mode: exit immediately. Active VPN sessions persist.
         if key.code == KeyCode::Char('q') && self.input_mode == InputMode::Normal {
-            if matches!(
-                self.connection_state,
-                ConnectionState::Connected { .. } | ConnectionState::Connecting { .. }
-            ) {
-                self.input_mode = InputMode::ConfirmQuit {
-                    confirm_selected: false,
-                };
-            } else {
-                self.handle_message(Message::Quit);
-            }
+            self.handle_message(Message::Quit);
             return;
         }
 
@@ -155,12 +147,16 @@ impl App {
                 }
             }
             InputMode::Help { mut scroll } => {
+                let max_scroll = help_max_scroll_for_terminal_height(
+                    self.terminal_size.1,
+                    crate::ui::overlays::help::total_lines(),
+                );
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('?' | 'q') => {
                         self.handle_message(Message::CloseOverlay);
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
-                        scroll = scroll.saturating_add(1);
+                        scroll = scroll.saturating_add(1).min(max_scroll);
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
                         scroll = scroll.saturating_sub(1);
@@ -169,7 +165,7 @@ impl App {
                         scroll = 0;
                     }
                     KeyCode::Char('G') | KeyCode::End => {
-                        scroll = u16::MAX;
+                        scroll = max_scroll;
                     }
                     _ => {}
                 }
@@ -235,20 +231,6 @@ impl App {
                     }
                 }
             },
-            InputMode::ConfirmQuit {
-                mut confirm_selected,
-            } => match handle_confirm_keys(key, &mut confirm_selected) {
-                ConfirmAction::Confirmed => self.handle_message(Message::Quit),
-                ConfirmAction::Cancelled => self.handle_message(Message::CloseOverlay),
-                ConfirmAction::None => {
-                    if let InputMode::ConfirmQuit {
-                        confirm_selected: cs,
-                    } = &mut self.input_mode
-                    {
-                        *cs = confirm_selected;
-                    }
-                }
-            },
             InputMode::Normal => self.handle_normal_keys(key),
         }
     }
@@ -261,7 +243,11 @@ impl App {
         if self.input_mode != InputMode::Normal {
             match (&mut self.input_mode, mouse.kind) {
                 (InputMode::Help { scroll }, MouseEventKind::ScrollDown) => {
-                    *scroll = scroll.saturating_add(3);
+                    let max_scroll = help_max_scroll_for_terminal_height(
+                        self.terminal_size.1,
+                        crate::ui::overlays::help::total_lines(),
+                    );
+                    *scroll = scroll.saturating_add(3).min(max_scroll);
                 }
                 (InputMode::Help { scroll }, MouseEventKind::ScrollUp) => {
                     *scroll = scroll.saturating_sub(3);

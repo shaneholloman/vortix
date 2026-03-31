@@ -1371,137 +1371,98 @@ fn test_text_field_insert_at_middle_of_multibyte() {
 }
 
 // ====================================================================
-// Confirm dialog key handling tests
+// Quit + help overlay behavior tests
 // ====================================================================
 
 #[test]
-fn test_confirm_dialog_left_selects_yes() {
+fn test_q_in_normal_mode_quits_while_connected() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     let mut app = test_app();
     add_profiles(&mut app, &["vpn-a"]);
     set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: false,
-    };
 
-    app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-    assert!(matches!(
-        app.input_mode,
-        InputMode::ConfirmQuit {
-            confirm_selected: true
-        }
-    ));
+    app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+
+    assert!(app.should_quit);
+    assert!(matches!(app.input_mode, InputMode::Normal));
 }
 
 #[test]
-fn test_confirm_dialog_right_selects_no() {
+fn test_q_in_normal_mode_quits_while_disconnected() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: true,
-    };
 
-    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    assert!(matches!(
-        app.input_mode,
-        InputMode::ConfirmQuit {
-            confirm_selected: false
-        }
-    ));
-}
+    app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
 
-#[test]
-fn test_confirm_dialog_tab_toggles() {
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
-    let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: false,
-    };
-
-    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-    assert!(matches!(
-        app.input_mode,
-        InputMode::ConfirmQuit {
-            confirm_selected: true
-        }
-    ));
-
-    app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
-    assert!(matches!(
-        app.input_mode,
-        InputMode::ConfirmQuit {
-            confirm_selected: false
-        }
-    ));
-}
-
-#[test]
-fn test_confirm_dialog_enter_yes_quits() {
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
-    let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: true,
-    };
-
-    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(app.should_quit);
 }
 
 #[test]
-fn test_confirm_dialog_enter_no_cancels() {
+fn test_help_scroll_down_clamps_at_max() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: false,
-    };
+    let max_scroll = crate::state::help_max_scroll_for_terminal_height(
+        app.terminal_size.1,
+        crate::ui::overlays::help::total_lines(),
+    );
+    app.input_mode = InputMode::Help { scroll: 0 };
 
-    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(!app.should_quit);
-    assert!(matches!(app.input_mode, InputMode::Normal));
+    for _ in 0..(usize::from(max_scroll) + 10) {
+        app.handle_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
+    }
+
+    assert!(matches!(
+        app.input_mode,
+        InputMode::Help { scroll } if scroll == max_scroll
+    ));
 }
 
 #[test]
-fn test_confirm_dialog_y_always_confirms() {
+fn test_help_end_jumps_to_max_scroll() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: false,
-    };
+    let max_scroll = crate::state::help_max_scroll_for_terminal_height(
+        app.terminal_size.1,
+        crate::ui::overlays::help::total_lines(),
+    );
+    app.input_mode = InputMode::Help { scroll: 0 };
 
-    app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
-    assert!(app.should_quit, "'y' should quit regardless of selection");
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+
+    assert!(matches!(
+        app.input_mode,
+        InputMode::Help { scroll } if scroll == max_scroll
+    ));
 }
 
 #[test]
-fn test_confirm_dialog_n_always_cancels() {
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+fn test_help_mouse_scroll_down_clamps_at_max() {
+    use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
 
     let mut app = test_app();
-    add_profiles(&mut app, &["vpn-a"]);
-    set_connected(&mut app, "vpn-a");
-    app.input_mode = InputMode::ConfirmQuit {
-        confirm_selected: true,
-    };
+    let max_scroll = crate::state::help_max_scroll_for_terminal_height(
+        app.terminal_size.1,
+        crate::ui::overlays::help::total_lines(),
+    );
+    app.input_mode = InputMode::Help { scroll: 0 };
 
-    app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
-    assert!(!app.should_quit);
-    assert!(matches!(app.input_mode, InputMode::Normal));
+    for _ in 0..20 {
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+
+    assert!(matches!(
+        app.input_mode,
+        InputMode::Help { scroll } if scroll == max_scroll
+    ));
 }
 
 // ====================================================================
