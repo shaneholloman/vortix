@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-04
+
+### Bug Fixes
+
+- Detect missing resolvconf before WireGuard connect on Linux ([#186](https://github.com/Harry-kp/vortix/pull/186))
+- Add dependency check to CLI connect command
+- Suppress unused variable warning on macOS
+- Use --version test for systemd-resolvconf compatibility
+
+### Documentation
+
+- Add Arch Linux & distribution-specific FAQ to troubleshooting
+- Clarify iptables error and wg-quick routing on cloud providers
+- Expand troubleshooting and add WireGuard configuration guide
+
+
+
 ## [0.2.0] - 2026-03-31
 
 ### Added
