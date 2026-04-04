@@ -64,7 +64,7 @@ impl VpnEngine {
         let protocol = profile.protocol;
         let config_path = profile.config_path.clone();
 
-        let missing = Self::check_dependencies(protocol);
+        let missing = Self::check_dependencies(protocol, &config_path);
         if !missing.is_empty() {
             return Err(format!(
                 "Missing dependencies: {}. Install with: {}",
