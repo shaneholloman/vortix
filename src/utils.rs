@@ -631,10 +631,10 @@ pub(crate) fn resolvconf_works() -> bool {
     if !binary_exists("resolvconf") {
         return false;
     }
-    // `resolvconf -l` (list) is a read-only operation.  If `/etc/resolv.conf`
-    // was not created by openresolv it exits non-zero with "signature mismatch".
+    // Test with `--version` which works with both openresolv and systemd-resolvconf.
+    // `resolvconf -l` (list) is not supported by systemd-resolvconf's shim.
     std::process::Command::new("resolvconf")
-        .arg("-l")
+        .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
