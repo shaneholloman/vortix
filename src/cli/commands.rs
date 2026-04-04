@@ -16,6 +16,7 @@ use crate::cli::output::{
 use crate::config::AppConfig;
 use crate::constants;
 use crate::engine::VpnEngine;
+use crate::state::Protocol;
 
 /// Dispatch a CLI command. Returns `true` if handled (program should exit).
 #[must_use]
@@ -135,6 +136,63 @@ fn handle_up(
             err_permission_denied(&format!("vortix up {profile_name}")),
             ExitCode::PermissionDenied,
         );
+    }
+
+    // Check dependencies before attempting connection (same check as TUI)
+    engine.load_metadata();
+    if let Some(profile) = engine.profiles.iter().find(|p| p.name == profile_name) {
+        let (protocol, config_path) = (profile.protocol, &profile.config_path);
+        let mut missing = Vec::new();
+
+        match protocol {
+            Protocol::WireGuard => {
+                if !crate::utils::binary_exists("wg-quick") {
+                    missing.push("wg-quick".to_string());
+                }
+                if !crate::utils::binary_exists("wg") {
+                    missing.push("wireguard-tools".to_string());
+                }
+                // Check for resolvconf on Linux when DNS is configured
+                #[cfg(target_os = "linux")]
+                if crate::utils::wireguard_config_has_dns(config_path)
+                    && !crate::utils::resolvconf_works()
+                {
+                    if crate::utils::is_systemd_resolved() {
+                        missing.push("resolvconf (systemd)".to_string());
+                    } else {
+                        missing.push("resolvconf".to_string());
+                    }
+                }
+            }
+            Protocol::OpenVPN => {
+                if !crate::utils::binary_exists("openvpn") {
+                    missing.push("openvpn".to_string());
+                }
+            }
+        }
+
+        if !missing.is_empty() {
+            let hint = missing
+                .iter()
+                .map(|tool| crate::platform::install_hint(tool))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            print_error_and_exit(
+                mode,
+                "up",
+                CliError {
+                    code: "dependency_missing",
+                    message: format!(
+                        "Missing dependencies: {}. Install with: {}",
+                        missing.join(", "),
+                        hint
+                    ),
+                    hint: None,
+                },
+                ExitCode::GeneralError,
+            );
+        }
     }
 
     match engine.connect_and_wait(&profile_name, Duration::from_secs(timeout_secs)) {
