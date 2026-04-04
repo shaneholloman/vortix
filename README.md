@@ -445,21 +445,39 @@ Vortix will now automatically detect `resolvconf` and proceed with the connectio
 - **Containers** with minimal kernel capabilities
 - **Custom kernels** built without netfilter support
 
-This is **not a Vortix issue** — it's a system limitation that affects all Linux VPN tools.
+This is **not a Vortix issue** — it's a system limitation that affects all Linux VPN tools, specifically:
+- **Vortix's kill switch** (requires iptables/nftables for firewall rules)
+- **wg-quick's automatic routing** (when `AllowedIPs = 0.0.0.0/0` is set in the WireGuard config)
 
-**Workaround (if you don't need the kill switch):**
+**Workaround 1: Disable the kill switch (doesn't help on cloud providers):**
 ```bash
-# Disable the kill switch (which requires iptables/nftables)
 sudo vortix killswitch off
 sudo vortix up your-profile
 ```
 
-The kill switch provides extra security by blocking all traffic if the VPN drops. Without it, you have normal firewall rules only.
+This only works if your WireGuard profile doesn't use `AllowedIPs = 0.0.0.0/0`. If it does, wg-quick will still try to configure iptables.
+
+**Workaround 2: Modify your WireGuard profile for cloud providers:**
+
+If your profile has `AllowedIPs = 0.0.0.0/0` (route all traffic through VPN), wg-quick automatically configures firewall rules. On cloud providers, change it to a more restrictive setting:
+
+```ini
+# ❌ This requires iptables (will fail on cloud providers)
+AllowedIPs = 0.0.0.0/0
+
+# ✅ This only routes VPN subnet (no iptables needed)
+AllowedIPs = 10.0.0.0/8
+```
+
+Edit your profile with `vortix show <profile> --raw` to see the current `AllowedIPs` setting.
 
 **Verify if your system supports iptables:**
 ```bash
 modprobe ip_tables && echo "✓ Supported" || echo "✗ Not available on this kernel"
 ```
+
+**Best practice for cloud providers:**
+If you need to route all traffic through the VPN on a cloud provider, you'll need an instance with a standard kernel (not a restricted cloud kernel). Alternatively, use a home server, dedicated host, or bare metal with full kernel support.
 
 #### Q: How do I know what DNS resolver my system uses?
 
