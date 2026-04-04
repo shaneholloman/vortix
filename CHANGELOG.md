@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Detect missing `resolvconf` before WireGuard connect on Linux, with automatic distro-specific install hints ([#186](https://github.com/Harry-kp/vortix/pull/186))
+- Detect missing `resolvconf` before WireGuard connect on Linux ([#186](https://github.com/Harry-kp/vortix/issues/186), [#187](https://github.com/Harry-kp/vortix/pull/187)) — Vortix now shows clear install instructions instead of cryptic wg-quick errors when DNS is configured but resolvconf isn't available on Arch/Fedora
 - Add CLI dependency check to catch missing tools before connection attempts
 - Fix systemd-resolvconf compatibility by testing `--version` instead of `resolvconf -l`
 
