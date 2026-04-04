@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-04
+
+### Fixed
+
+- Detect missing `resolvconf` before WireGuard connect on Linux ([#186](https://github.com/Harry-kp/vortix/issues/186), [#187](https://github.com/Harry-kp/vortix/pull/187)) — Vortix now shows clear install instructions instead of cryptic wg-quick errors when DNS is configured but resolvconf isn't available on Arch/Fedora
+- Add CLI dependency check to catch missing tools before connection attempts
+
+### Documentation
+
+- Add comprehensive Arch Linux troubleshooting FAQ and distribution-specific guidance in README
+- Add WireGuard configuration guide explaining AllowedIPs, cloud provider limitations, and routing best practices
+- Add quick error reference table for common connection issues
+
+
+
 ## [0.2.0] - 2026-03-31
 
 ### Added
