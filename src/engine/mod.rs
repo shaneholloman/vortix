@@ -476,7 +476,7 @@ impl VpnEngine {
 
     /// Check if required binaries are available for a given protocol.
     #[must_use]
-    pub fn check_dependencies(protocol: Protocol) -> Vec<String> {
+    pub fn check_dependencies(protocol: Protocol, config_path: &std::path::Path) -> Vec<String> {
         let mut missing = Vec::new();
         match protocol {
             Protocol::WireGuard => {
@@ -486,6 +486,21 @@ impl VpnEngine {
                 if !utils::binary_exists("wg") {
                     missing.push("wireguard-tools".to_string());
                 }
+                // On Linux, wg-quick uses `resolvconf` to set DNS when the
+                // config contains a DNS directive.  We must verify that a
+                // working resolvconf is present — `openresolv` installed on
+                // a systemd-resolved system will exist but fail at runtime
+                // with "signature mismatch".
+                #[cfg(target_os = "linux")]
+                if utils::wireguard_config_has_dns(config_path) && !utils::resolvconf_works() {
+                    if utils::is_systemd_resolved() {
+                        missing.push("resolvconf (systemd)".to_string());
+                    } else {
+                        missing.push("resolvconf".to_string());
+                    }
+                }
+                #[cfg(not(target_os = "linux"))]
+                let _ = config_path; // suppress unused warning on non-Linux
             }
             Protocol::OpenVPN => {
                 if !utils::binary_exists("openvpn") {

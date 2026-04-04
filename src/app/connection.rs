@@ -65,7 +65,7 @@ impl App {
     /// Check if required binaries are available for a given protocol.
     /// Uses `which` to locate binaries — avoids running them directly since
     /// some tools (e.g. `wg-quick --version`) hang on macOS.
-    fn check_dependencies(protocol: Protocol) -> Vec<String> {
+    fn check_dependencies(protocol: Protocol, config_path: &std::path::Path) -> Vec<String> {
         let mut missing = Vec::new();
         match protocol {
             Protocol::WireGuard => {
@@ -75,6 +75,22 @@ impl App {
                 if !utils::binary_exists("wg") {
                     missing.push("wireguard-tools".to_string());
                 }
+                // On Linux, wg-quick uses `resolvconf` to set DNS when the
+                // config contains a DNS directive.  We must verify that a
+                // working resolvconf is present — `openresolv` installed on
+                // a systemd-resolved system will exist but fail at runtime
+                // with "signature mismatch".
+                #[cfg(target_os = "linux")]
+                if utils::wireguard_config_has_dns(config_path) && !utils::resolvconf_works() {
+                    // Point the user to the right package for their system.
+                    if utils::is_systemd_resolved() {
+                        missing.push("resolvconf (systemd)".to_string());
+                    } else {
+                        missing.push("resolvconf".to_string());
+                    }
+                }
+                #[cfg(not(target_os = "linux"))]
+                let _ = config_path; // suppress unused warning on non-Linux
             }
             Protocol::OpenVPN => {
                 if !utils::binary_exists("openvpn") {
@@ -138,7 +154,7 @@ impl App {
         };
 
         // Check dependencies FIRST (no point asking for root if tool is missing)
-        let missing = Self::check_dependencies(protocol);
+        let missing = Self::check_dependencies(protocol, &config_path);
         if !missing.is_empty() {
             self.input_mode = InputMode::DependencyError { protocol, missing };
             return;

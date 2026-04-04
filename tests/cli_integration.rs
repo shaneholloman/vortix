@@ -105,9 +105,11 @@ fn engine_sort_profiles_by_protocol() {
 
 #[test]
 fn engine_check_dependencies_wireguard() {
-    let missing = VpnEngine::check_dependencies(Protocol::WireGuard);
+    // Use a dummy config path — the resolvconf check only matters on Linux
+    let dummy = std::path::Path::new("/dev/null");
+    let missing = VpnEngine::check_dependencies(Protocol::WireGuard, dummy);
     // In test env, wg-quick/wg may or may not be available; just ensure no panic
-    assert!(missing.len() <= 2);
+    assert!(missing.len() <= 3); // wg-quick, wg, and possibly resolvconf on Linux
 }
 
 #[test]

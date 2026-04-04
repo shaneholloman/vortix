@@ -77,5 +77,26 @@ pub fn install_hint(pkg: &str) -> String {
 #[cfg(target_os = "linux")]
 #[must_use]
 pub fn install_hint(pkg: &str) -> String {
-    format!("sudo apt install {pkg}  # or: sudo dnf install {pkg}")
+    match pkg {
+        // systemd-resolved is managing DNS — need the systemd-provided shim.
+        // `openresolv` will NOT work here (causes "signature mismatch").
+        "resolvconf (systemd)" => "\
+sudo apt install systemd-resolved  # Debian/Ubuntu (provides resolvconf shim)\n\
+sudo pacman -S systemd-resolvconf  # Arch\n\
+sudo dnf install systemd-resolved  # Fedora"
+            .to_string(),
+        // Non-systemd system — standalone openresolv works fine.
+        "resolvconf" => "\
+sudo apt install openresolv  # Debian/Ubuntu\n\
+sudo pacman -S openresolv    # Arch\n\
+sudo dnf install openresolv  # Fedora"
+            .to_string(),
+        // WireGuard binaries are shipped by the wireguard-tools package.
+        "wg" | "wg-quick" => "\
+sudo apt install wireguard-tools  # Debian/Ubuntu\n\
+sudo pacman -S wireguard-tools    # Arch\n\
+sudo dnf install wireguard-tools  # Fedora"
+            .to_string(),
+        _ => format!("sudo apt install {pkg}  # or: sudo dnf install {pkg}"),
+    }
 }

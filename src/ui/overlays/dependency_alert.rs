@@ -33,20 +33,7 @@ pub fn render(frame: &mut Frame, protocol: Protocol, missing: &[String]) {
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
-    let chunks = Layout::vertical([
-        Constraint::Min(0),
-        Constraint::Length(8),
-        Constraint::Min(0),
-    ])
-    .split(inner);
-
-    let pkg = if protocol == Protocol::WireGuard {
-        "wireguard-tools"
-    } else {
-        "openvpn"
-    };
-
-    let text = vec![
+    let mut text = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(
@@ -66,24 +53,43 @@ pub fn render(frame: &mut Frame, protocol: Protocol, missing: &[String]) {
         Line::from(vec![Span::raw(
             " To fix this, please run the following in your terminal:",
         )]),
-        Line::from(vec![Span::styled(
-            format!(" {}", crate::platform::install_hint(pkg)),
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(""),
-        Line::from(vec![
-            Span::raw(" Press "),
-            Span::styled(
-                "[Esc]",
+    ];
+
+    // Show install hints per missing tool
+    for tool in missing {
+        let hint = crate::platform::install_hint(tool);
+        for hint_line in hint.lines() {
+            text.push(Line::from(vec![Span::styled(
+                format!(" {hint_line}"),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(" to return to dashboard."),
-        ]),
-    ];
+            )]));
+        }
+    }
+
+    text.push(Line::from(""));
+    text.push(Line::from(vec![
+        Span::raw(" Press "),
+        Span::styled(
+            "[Esc]",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" to return to dashboard."),
+    ]));
+
+    // Compute content height dynamically — cap to available space.
+    let content_height = u16::try_from(text.len())
+        .unwrap_or(u16::MAX)
+        .min(inner.height);
+    let chunks = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(content_height),
+        Constraint::Min(0),
+    ])
+    .split(inner);
 
     frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), chunks[1]);
 }

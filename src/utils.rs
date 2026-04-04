@@ -620,6 +620,67 @@ pub(crate) fn binary_exists(name: &str) -> bool {
         .is_ok_and(|s| s.success())
 }
 
+/// Check whether `resolvconf` is installed and functional.
+///
+/// Returns `true` only when the `resolvconf` binary exists **and** can
+/// operate on the current system.  `openresolv` will fail with a
+/// "signature mismatch" error when `systemd-resolved` manages
+/// `/etc/resolv.conf`, so a simple `which resolvconf` is not enough.
+#[cfg(target_os = "linux")]
+pub(crate) fn resolvconf_works() -> bool {
+    if !binary_exists("resolvconf") {
+        return false;
+    }
+    // Test with `--version` which works with both openresolv and systemd-resolvconf.
+    // `resolvconf -l` (list) is not supported by systemd-resolvconf's shim.
+    std::process::Command::new("resolvconf")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Detect whether `systemd-resolved` is managing DNS on this system.
+///
+/// Checks if `/etc/resolv.conf` is a symlink pointing into a
+/// `systemd`-owned path (e.g. `/run/systemd/resolve/`).
+#[cfg(target_os = "linux")]
+pub(crate) fn is_systemd_resolved() -> bool {
+    match std::fs::read_link("/etc/resolv.conf") {
+        Ok(target) => {
+            let s = target.to_string_lossy();
+            s.contains("systemd") || s.contains("resolvconf/run")
+        }
+        Err(_) => false,
+    }
+}
+
+/// Check whether a `WireGuard` config file contains a `DNS =` directive.
+///
+/// When `DNS` is present, `wg-quick` on Linux will invoke `resolvconf` to
+/// manage DNS, which may not be installed on all distributions (e.g. Arch,
+/// Fedora, NixOS).  This helper lets callers detect that situation early.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn wireguard_config_has_dns(config_path: &std::path::Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(config_path) else {
+        return false;
+    };
+    for line in content.lines() {
+        let trimmed = line.trim().to_lowercase();
+        if trimmed.starts_with("dns") {
+            // Match "dns = …" with optional whitespace around '='
+            if let Some(rest) = trimmed.strip_prefix("dns") {
+                let rest = rest.trim_start();
+                if rest.starts_with('=') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -965,5 +1026,76 @@ mod tests {
         assert!(read_openvpn_saved_auth(name).is_none());
 
         delete_openvpn_auth_file(name);
+    }
+
+    // --- wireguard_config_has_dns tests ---
+
+    #[test]
+    fn test_wg_config_has_dns_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wg0.conf");
+        std::fs::write(
+            &path,
+            "[Interface]\nPrivateKey = abc\nAddress = 10.0.0.2/24\nDNS = 1.1.1.1\n\n[Peer]\nPublicKey = xyz\nEndpoint = 1.2.3.4:51820\n",
+        )
+        .unwrap();
+        assert!(wireguard_config_has_dns(&path));
+    }
+
+    #[test]
+    fn test_wg_config_has_dns_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wg0.conf");
+        std::fs::write(
+            &path,
+            "[Interface]\nPrivateKey = abc\nAddress = 10.0.0.2/24\n\n[Peer]\nPublicKey = xyz\nEndpoint = 1.2.3.4:51820\n",
+        )
+        .unwrap();
+        assert!(!wireguard_config_has_dns(&path));
+    }
+
+    #[test]
+    fn test_wg_config_has_dns_case_insensitive() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wg0.conf");
+        std::fs::write(
+            &path,
+            "[Interface]\nPrivateKey = abc\nAddress = 10.0.0.2/24\ndns = 8.8.8.8\n\n[Peer]\nPublicKey = xyz\nEndpoint = 1.2.3.4:51820\n",
+        )
+        .unwrap();
+        assert!(wireguard_config_has_dns(&path));
+    }
+
+    #[test]
+    fn test_wg_config_has_dns_with_spaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wg0.conf");
+        std::fs::write(
+            &path,
+            "[Interface]\nPrivateKey = abc\nAddress = 10.0.0.2/24\n  DNS  =  1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = xyz\nEndpoint = 1.2.3.4:51820\n",
+        )
+        .unwrap();
+        assert!(wireguard_config_has_dns(&path));
+    }
+
+    #[test]
+    fn test_wg_config_has_dns_nonexistent_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.conf");
+        assert!(!wireguard_config_has_dns(&path));
+    }
+
+    #[test]
+    fn test_wg_config_dns_in_comment_not_matched() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wg0.conf");
+        // A comment like "# DNS = ..." should not be matched since it starts
+        // with '#', not 'dns' after trimming.
+        std::fs::write(
+            &path,
+            "[Interface]\nPrivateKey = abc\nAddress = 10.0.0.2/24\n# DNS = 1.1.1.1\n\n[Peer]\nPublicKey = xyz\nEndpoint = 1.2.3.4:51820\n",
+        )
+        .unwrap();
+        assert!(!wireguard_config_has_dns(&path));
     }
 }

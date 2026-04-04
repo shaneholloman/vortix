@@ -66,10 +66,16 @@ If you use Vortix on Linux and hit a problem, please open an issue and include `
 | `curl` | Pre-installed | `apt install curl` | Telemetry and IP detection |
 | `openvpn` | `brew install openvpn` | `apt install openvpn` | OpenVPN sessions |
 | `wireguard-tools` | `brew install wireguard-tools` | `apt install wireguard-tools` | WireGuard sessions |
+| `resolvconf` / `systemd-resolved` | N/A (uses native DNS) | `systemd-resolvconf` or `openresolv` | WireGuard DNS management (optional, needed if DNS in config) |
 | `iptables` or `nftables` | N/A (uses `pfctl`) | Pre-installed | Kill switch |
 | `iproute2` | N/A (uses `ifconfig`) | Pre-installed | Interface detection |
 
 > Vortix checks for missing tools at startup and shows a warning toast with install instructions.
+
+**DNS tools note:** If your WireGuard profile includes a `DNS =` directive, Vortix will automatically detect and warn about missing DNS tools. Install accordingly:
+- **Arch/Fedora (systemd-based):** `sudo pacman -S systemd-resolvconf` or `sudo dnf install systemd-resolved`
+- **Debian/Ubuntu:** `sudo apt install systemd-resolved` (usually pre-installed)
+- **Alpine/Void (OpenRC):** Vortix falls back to `/etc/resolv.conf` editing automatically
 
 ### Build dependencies (source installs only)
 
@@ -80,20 +86,20 @@ If you use Vortix on Linux and hit a problem, please open an issue and include `
 
 **Ubuntu/Debian:**
 ```bash
-sudo apt install curl wireguard-tools openvpn iptables iproute2
+sudo apt install curl wireguard-tools openvpn iptables iproute2 systemd-resolved
 ```
 
 **Fedora/RHEL:**
 ```bash
-sudo dnf install curl wireguard-tools openvpn iptables iproute
+sudo dnf install curl wireguard-tools openvpn iptables iproute systemd-resolved
 ```
 
 **Arch Linux** (only needed for source builds — `pacman -S vortix` handles deps automatically):
 ```bash
-sudo pacman -S curl wireguard-tools openvpn iptables iproute2
+sudo pacman -S curl wireguard-tools openvpn iptables iproute2 systemd-resolvconf
 ```
 
-> **DNS detection** uses `resolvectl` (systemd-resolved) as the primary method, with `nmcli` (NetworkManager) and `/etc/resolv.conf` as fallbacks. Non-systemd distros (Alpine, Void, Gentoo OpenRC) will use the `/etc/resolv.conf` fallback automatically.
+> **DNS management:** Vortix uses `resolvconf` (via `systemd-resolvconf` or `openresolv`) to manage DNS when your WireGuard profile contains `DNS =`. On systemd distros (most modern Linux), this is automatic via systemd-resolved. Non-systemd distros (Alpine, Void, Gentoo OpenRC) will use `/etc/resolv.conf` editing as a fallback.
 
 ## Installation
 
@@ -398,6 +404,18 @@ ip_api_fallbacks = ["https://api.ipify.org", "https://icanhazip.com", "https://i
 
 ## Troubleshooting
 
+### Quick Reference: Common Errors
+
+| Error Message | Cause | Solution |
+|---------------|-------|----------|
+| `Missing dependencies: resolvconf (systemd)` | WireGuard profile has DNS but `resolvconf` not installed | Run `sudo pacman -S systemd-resolvconf` (Arch) or `sudo dnf install systemd-resolved` (Fedora) |
+| `iptables-restore: unable to initialize table` | Cloud kernel doesn't support iptables; profile uses `AllowedIPs = 0.0.0.0/0` | Change `AllowedIPs` to `10.0.0.0/8` or disable kill switch |
+| `wg-quick: The config file must be a valid interface name` | Profile name > 15 characters | Rename: `vortix rename long-name short-name` |
+| `Connection succeeded but no internet` | `AllowedIPs` doesn't include your target | Add target IP to `AllowedIPs` in config |
+| `connection timed out` or `Connection refused` | Can't reach VPN endpoint | Check firewall/cloud provider port restrictions |
+
+### General Issues
+
 **Profiles missing after upgrade (Linux)**
 
 If you previously ran vortix with `sudo` and profiles were stored in `/root/.config/vortix/`, the app will offer a one-time migration prompt. Accept it to move your data to `~/.config/vortix/` under your real user account.
@@ -415,6 +433,222 @@ If config files are owned by root, fix ownership:
 ```bash
 sudo chown -R $(whoami) ~/.config/vortix/
 ```
+
+### Arch Linux & Distribution-Specific FAQ
+
+#### Q: Connection fails with "Missing dependencies: resolvconf (systemd)"
+
+**A:** This happens on Arch, Fedora, and NixOS when your WireGuard profile has DNS settings but `resolvconf` isn't installed. These distros don't include DNS management tools by default.
+
+**Fix:**
+```bash
+# Arch Linux (systemd-based)
+sudo pacman -S systemd-resolvconf
+
+# Fedora (systemd-based)
+sudo dnf install systemd-resolved
+
+# Debian/Ubuntu (should be pre-installed)
+sudo apt install systemd-resolved
+```
+
+Vortix will now automatically detect `resolvconf` and proceed with the connection. No restart needed.
+
+#### Q: Connection fails with "iptables-restore: unable to initialize table"
+
+**A:** Your system doesn't have the `ip_tables` kernel module. This typically happens on:
+- **Cloud providers** (DigitalOcean, AWS Lambda, Google Cloud Run, etc.) that intentionally disable netfilter
+- **Containers** with minimal kernel capabilities
+- **Custom kernels** built without netfilter support
+
+This is **not a Vortix issue** — it's a system limitation that affects all Linux VPN tools, specifically:
+- **Vortix's kill switch** (requires iptables/nftables for firewall rules)
+- **wg-quick's automatic routing** (when `AllowedIPs = 0.0.0.0/0` is set in the WireGuard config)
+
+**Workaround 1: Disable the kill switch (doesn't help on cloud providers):**
+```bash
+sudo vortix killswitch off
+sudo vortix up your-profile
+```
+
+This only works if your WireGuard profile doesn't use `AllowedIPs = 0.0.0.0/0`. If it does, wg-quick will still try to configure iptables.
+
+**Workaround 2: Modify your WireGuard profile for cloud providers:**
+
+If your profile has `AllowedIPs = 0.0.0.0/0` (route all traffic through VPN), wg-quick automatically configures firewall rules. On cloud providers, change it to a more restrictive setting:
+
+```ini
+# ❌ This requires iptables (will fail on cloud providers)
+AllowedIPs = 0.0.0.0/0
+
+# ✅ This only routes VPN subnet (no iptables needed)
+AllowedIPs = 10.0.0.0/8
+```
+
+Edit your profile with `vortix show <profile> --raw` to see the current `AllowedIPs` setting.
+
+**Verify if your system supports iptables:**
+```bash
+modprobe ip_tables && echo "✓ Supported" || echo "✗ Not available on this kernel"
+```
+
+**Best practice for cloud providers:**
+If you need to route all traffic through the VPN on a cloud provider, you'll need an instance with a standard kernel (not a restricted cloud kernel). Alternatively, use a home server, dedicated host, or bare metal with full kernel support.
+
+#### Q: How do I know what DNS resolver my system uses?
+
+**A:** Run this to check which method Vortix will use:
+
+```bash
+# Systemd (most modern Linux distros)
+resolvectl status 2>/dev/null && echo "✓ Using systemd-resolved"
+
+# NetworkManager
+nmcli dev show 2>/dev/null | grep DNS && echo "✓ Using NetworkManager"
+
+# Fallback check
+cat /etc/resolv.conf | head -3
+```
+
+Vortix automatically detects and respects your system's DNS setup.
+
+#### Q: Can I use Vortix on non-systemd distros?
+
+**A:** Yes, but with limitations on DNS management:
+- **Arch, Fedora, Ubuntu, Debian** → Full support (systemd or alternatives available)
+- **Alpine, Void, Gentoo (OpenRC)** → Vortix falls back to editing `/etc/resolv.conf` directly
+- **NixOS** → Works, but DNS may require custom configuration
+
+If you use a non-systemd distro and hit issues, please [open an issue](https://github.com/Harry-kp/vortix/issues) with `vortix report` output.
+
+#### Q: Why does the connection succeed but DNS doesn't work?
+
+**A:** If `vortix up` succeeds but you can't resolve domains, it means:
+
+1. **The VPN tunnel is active** (IP changing works)
+2. **DNS configuration failed** (resolvconf not working properly)
+
+**Debug steps:**
+```bash
+# Check if resolvconf is working
+resolvconf --version
+
+# Check active DNS servers
+resolvectl status | grep -A5 "DNS Servers"
+
+# Manually test DNS through the VPN
+dig @8.8.8.8 google.com
+
+# Check the system's resolv.conf symlink
+ls -la /etc/resolv.conf
+```
+
+If `/etc/resolv.conf` is not managed by systemd (not a symlink to `/run/systemd/`), you may need to install `systemd-resolvconf` or `openresolv`.
+
+#### Q: WireGuard interface name is too long
+
+**A:** Linux WireGuard interfaces have a 15-character name limit. If your profile name is longer, wg-quick will fail with "invalid interface name".
+
+**Fix:** Rename your profile to something shorter:
+```bash
+vortix rename my-very-long-profile-name work-vpn
+```
+
+WireGuard interface names should contain only alphanumeric characters, hyphens, and underscores.
+
+#### Q: How do I report a distro-specific issue?
+
+**A:** Include this information when opening an issue:
+
+```bash
+vortix report              # Generates a complete report
+uname -a                   # Kernel version
+cat /etc/os-release        # Distro info
+systemctl --version        # Init system
+```
+
+Tested and supported Linux distros in CI: **Ubuntu 20.04/22.04**, **Fedora 40+**, **Arch Linux**. If you use a different distro and hit issues, that's valuable signal for the project.
+
+### WireGuard Configuration Guide
+
+#### Understanding AllowedIPs
+
+The `AllowedIPs` setting in your WireGuard config determines what traffic goes through the VPN:
+
+```ini
+# Route ALL traffic through VPN (requires iptables/nftables for firewall rules)
+AllowedIPs = 0.0.0.0/0          # ⚠️ May fail on cloud providers, containers
+
+# Route only VPN subnet traffic (no special firewall rules needed)
+AllowedIPs = 10.0.0.0/8          # ✅ Works everywhere, even cloud providers
+
+# Route specific traffic only
+AllowedIPs = 192.168.1.0/24      # ✅ Route only corporate network
+```
+
+**Why this matters:**
+- When `AllowedIPs = 0.0.0.0/0`, wg-quick automatically configures firewall rules via iptables/nftables
+- Cloud providers (DigitalOcean, AWS Lambda, Google Cloud Run) disable iptables kernel modules
+- Restrictive `AllowedIPs` avoids firewall configuration entirely
+
+**Recommendation for cloud servers:**
+If you're running Vortix on a cloud provider and need to route traffic through the VPN, use `AllowedIPs = 10.0.0.0/8` or another private subnet instead of `0.0.0.0/0`.
+
+#### Common WireGuard Configuration Issues
+
+**Issue: Connection succeeds but no internet access**
+
+Check your `AllowedIPs` setting:
+```bash
+vortix show your-profile --raw | grep AllowedIPs
+```
+
+- If it's `10.0.0.0/8` or similar, only traffic to that subnet goes through VPN
+- Add your target IP/subnet to `AllowedIPs` to route it through the tunnel
+- Example: `AllowedIPs = 10.0.0.0/8, 192.168.0.0/16`
+
+**Issue: Can't reach VPN server from cloud provider**
+
+Some cloud providers block outbound UDP 51820 or other ports. Try:
+```bash
+# Check if you can reach the endpoint
+ping -c 1 138.197.3.155
+
+# Test specific port (replace with your endpoint)
+nc -zu 138.197.3.155 51820 && echo "✓ Port open" || echo "✗ Port blocked"
+```
+
+If blocked, contact your cloud provider to allow WireGuard ports.
+
+**Issue: DNS works but only for some domains**
+
+This usually means:
+1. VPN DNS servers are configured but not all traffic routes through VPN
+2. Your system's DNS fallback is resolving some queries locally
+
+Check if `DNS =` is in your config and matches your VPN provider's DNS servers.
+
+#### Testing Your WireGuard Profile
+
+After creating/importing a profile, test the configuration:
+
+```bash
+# View the profile
+vortix show my-profile --raw
+
+# Check required fields
+vortix show my-profile --raw | grep -E "^(PrivateKey|PublicKey|AllowedIPs|Endpoint|Address|DNS)"
+
+# Expected output:
+# PrivateKey = (base64)
+# Address = 10.0.0.2/24
+# Endpoint = 1.2.3.4:51820
+# AllowedIPs = 10.0.0.0/8 (or 0.0.0.0/0)
+# PublicKey = (base64)
+# DNS = 8.8.8.8, 8.8.4.4 (optional)
+```
+
+All fields above are required except `DNS` (optional).
 
 ## Roadmap
 
